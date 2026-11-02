@@ -92,6 +92,29 @@ final class LyricsServiceTests: XCTestCase {
         XCTAssertEqual(client.calls, 0)
     }
 
+    func testSidecarWinsOverCachedOnlineResult() async throws {
+        let track = try makeTrack()
+        let sidecar = tempDir.appendingPathComponent("track.lrc")
+        try Data("[00:03.00]侧载歌词\n".utf8).write(to: sidecar)
+        let cache = makeCache()
+        try cache.save(
+            onlineLyrics,
+            title: track.title,
+            artist: track.artist,
+            duration: track.duration
+        )
+
+        let client = FakeLyricsClient()
+        client.result = onlineLyrics
+        let service = LyricsService(cache: cache, client: client)
+
+        let resolved = await service.resolve(for: track)
+
+        XCTAssertEqual(resolved?.origin, .sidecar)
+        XCTAssertEqual(resolved?.lyrics.lines.map(\.text), ["侧载歌词"])
+        XCTAssertEqual(client.calls, 0)
+    }
+
     func testOnlineHitIsCachedAndReusedWithoutNetwork() async throws {
         let track = try makeTrack()
         let cache = makeCache()
@@ -174,6 +197,73 @@ final class LyricsServiceTests: XCTestCase {
 
         XCTAssertNil(resolved)
         XCTAssertEqual(client.calls, 1)
+    }
+}
+
+final class LyricsDisplayStateTests: XCTestCase {
+    private let trackA = UUID()
+    private let trackB = UUID()
+    private let lyricsA = Lyrics(lines: [LyricLine(time: 1, text: "A")], isSynced: true)
+    private let lyricsB = Lyrics(lines: [LyricLine(time: 2, text: "B")], isSynced: true)
+
+    func testTrackChangeClearsDisplayedLyricsSynchronously() {
+        var state = LyricsDisplayState()
+        state.beginLoading(trackID: trackA)
+        state.finish(ResolvedLyrics(lyrics: lyricsA, origin: .online), for: trackA)
+        XCTAssertEqual(state.lyrics, lyricsA)
+        XCTAssertEqual(state.origin, .online)
+        XCTAssertFalse(state.isResolving)
+
+        let cleared = state.beginLoading(trackID: trackB)
+
+        // Cleared before any await/resolution for track B.
+        XCTAssertTrue(cleared)
+        XCTAssertNil(state.lyrics)
+        XCTAssertEqual(state.origin, .none)
+        XCTAssertTrue(state.isResolving)
+        XCTAssertEqual(state.trackID, trackB)
+    }
+
+    func testSameTrackRetryKeepsLyricsUntilResult() {
+        var state = LyricsDisplayState()
+        state.beginLoading(trackID: trackA)
+        state.finish(ResolvedLyrics(lyrics: lyricsA, origin: .sidecar), for: trackA)
+
+        let cleared = state.beginLoading(trackID: trackA)
+
+        XCTAssertFalse(cleared)
+        XCTAssertEqual(state.lyrics, lyricsA)
+        XCTAssertEqual(state.origin, .sidecar)
+        XCTAssertTrue(state.isResolving)
+    }
+
+    func testLateResultForPreviousTrackIsIgnored() {
+        var state = LyricsDisplayState()
+        state.beginLoading(trackID: trackA)
+        state.beginLoading(trackID: trackB)
+
+        state.finish(ResolvedLyrics(lyrics: lyricsA, origin: .online), for: trackA)
+
+        XCTAssertNil(state.lyrics)
+        XCTAssertTrue(state.isResolving)
+
+        state.finish(ResolvedLyrics(lyrics: lyricsB, origin: .online), for: trackB)
+        XCTAssertEqual(state.lyrics, lyricsB)
+        XCTAssertFalse(state.isResolving)
+    }
+
+    func testNilTrackClearsEverything() {
+        var state = LyricsDisplayState()
+        state.beginLoading(trackID: trackA)
+        state.finish(ResolvedLyrics(lyrics: lyricsA, origin: .override), for: trackA)
+
+        let cleared = state.beginLoading(trackID: nil)
+
+        XCTAssertTrue(cleared)
+        XCTAssertNil(state.lyrics)
+        XCTAssertNil(state.trackID)
+        XCTAssertEqual(state.origin, .none)
+        XCTAssertFalse(state.isResolving)
     }
 }
 

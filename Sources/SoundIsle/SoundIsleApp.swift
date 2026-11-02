@@ -23,17 +23,32 @@ struct SoundIsleApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
-            CommandMenu("歌词") {
-                Button("更换歌词…") {
-                    appDelegate.model.promptImportLyrics()
-                }
-                Button("恢复自动匹配") {
-                    appDelegate.model.restoreAutomaticLyrics()
-                }
-                Button("重试匹配") {
-                    appDelegate.model.retryLyrics()
-                }
+            LyricsCommands(model: appDelegate.model)
+        }
+    }
+}
+
+/// Mirrors the menu-bar enablement so 恢复自动匹配 and 重试匹配 are not offered
+/// when they cannot do anything.
+private struct LyricsCommands: Commands {
+    @ObservedObject var model: AppModel
+
+    var body: some Commands {
+        CommandMenu("歌词") {
+            Button("更换歌词…") {
+                model.promptImportLyrics()
             }
+            .disabled(model.currentTrack == nil)
+
+            Button("恢复自动匹配") {
+                model.restoreAutomaticLyrics()
+            }
+            .disabled(!model.hasLyricsOverride)
+
+            Button("重试匹配") {
+                model.retryLyrics()
+            }
+            .disabled(model.currentTrack == nil || model.isResolvingLyrics)
         }
     }
 }

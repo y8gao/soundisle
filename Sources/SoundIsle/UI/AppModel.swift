@@ -46,12 +46,15 @@ final class AppModel: ObservableObject {
     /// drives these through the hooks below.
     @Published private(set) var isLyricsVisible = false
     @Published private(set) var isLyricsLocked = false
-    /// Parsed lyrics for the current track; nil means "暂无歌词".
-    @Published private(set) var lyrics: Lyrics?
-    /// Where `lyrics` came from, so the UI can offer the right actions.
-    @Published private(set) var lyricsOrigin: LyricsOrigin = .none
-    @Published private(set) var isResolvingLyrics = false
+    /// Lyrics display state for the current track. Starting a lookup for a
+    /// different track clears the old lyrics synchronously, so a slow network
+    /// response never leaves the previous song's lines on screen.
+    @Published private(set) var lyricsState = LyricsDisplayState()
     @Published private(set) var currentLyricLineIndex: Int?
+
+    var lyrics: Lyrics? { lyricsState.lyrics }
+    var lyricsOrigin: LyricsOrigin { lyricsState.origin }
+    var isResolvingLyrics: Bool { lyricsState.isResolving }
     /// The overlay controller is created by `AppDelegate`; the menu bar and
     /// main window both go through the hooks below.
     weak var lyricsOverlay: LyricsOverlayWindowController?
@@ -73,6 +76,9 @@ final class AppModel: ObservableObject {
     private let lyricsCache: LyricsCache
     private let lyricsService: LyricsService
     private var lyricsTask: Task<Void, Never>?
+    /// Set after a successful override removal so the resolve outcome can
+    /// replace the status message.
+    private var pendingRestoreTrackID: UUID?
 
     // MARK: - Lifecycle
 
@@ -671,18 +677,24 @@ final class AppModel: ObservableObject {
             return
         }
         lyricsTask?.cancel()
-        isResolvingLyrics = false
-        apply(ResolvedLyrics(lyrics: parsed, origin: .override, sourceURL: url))
+        apply(ResolvedLyrics(lyrics: parsed, origin: .override, sourceURL: url), for: track.id)
         statusMessage = "已导入歌词"
     }
 
     /// 「恢复自动匹配」: drop the override and resolve the normal priority
-    /// chain again (sidecar, cache, then online).
+    /// chain again (sidecar, cache, then online). Success is reported only
+    /// after the override file was actually removed; the resolve outcome then
+    /// updates the message.
     func restoreAutomaticLyrics() {
         guard let track = currentTrack else { return }
-        try? lyricsCache.removeOverride(for: track.id)
+        do {
+            try lyricsCache.removeOverride(for: track.id)
+        } catch {
+            statusMessage = "无法清除歌词覆盖：\(error.localizedDescription)"
+            return
+        }
+        pendingRestoreTrackID = track.id
         loadLyrics(for: track)
-        statusMessage = "已恢复自动匹配"
     }
 
     /// User-initiated retry after a silent online miss.
@@ -697,27 +709,39 @@ final class AppModel: ObservableObject {
     private func loadLyrics(for track: Track?) {
         lyricsTask?.cancel()
         lyricsTask = nil
+        if let pending = pendingRestoreTrackID, pending != track?.id {
+            pendingRestoreTrackID = nil
+        }
         guard let track, !track.isMissing else {
-            isResolvingLyrics = false
-            apply(nil)
+            lyricsState.beginLoading(trackID: nil)
+            currentLyricLineIndex = nil
             return
         }
 
+        let trackChanged = lyricsState.trackID != track.id
+        lyricsState.beginLoading(trackID: track.id)
+        if trackChanged {
+            currentLyricLineIndex = nil
+        }
+
         lyricsService.isOnlineEnabled = library.settings.onlineLyricsEnabled
-        isResolvingLyrics = true
         lyricsTask = Task { [weak self] in
             guard let self else { return }
             let resolved = await self.lyricsService.resolve(for: track)
             guard !Task.isCancelled else { return }
-            self.isResolvingLyrics = false
             guard self.currentTrack?.id == track.id else { return }
-            self.apply(resolved)
+            self.apply(resolved, for: track.id)
+            if self.pendingRestoreTrackID == track.id {
+                self.pendingRestoreTrackID = nil
+                self.statusMessage = resolved == nil
+                    ? "已恢复自动匹配，但未找到歌词"
+                    : "已恢复自动匹配"
+            }
         }
     }
 
-    private func apply(_ resolved: ResolvedLyrics?) {
-        lyrics = resolved?.lyrics
-        lyricsOrigin = resolved?.origin ?? .none
+    private func apply(_ resolved: ResolvedLyrics?, for trackID: UUID) {
+        lyricsState.apply(resolved, for: trackID)
         currentLyricLineIndex = nil
         updateCurrentLyricLine(at: engine.position)
     }
@@ -725,12 +749,7 @@ final class AppModel: ObservableObject {
     /// `.lrc` keeps its timestamps; plain text is shown line-by-line even if
     /// the file happens to contain bracket-looking text.
     private static func parseImportedLyrics(_ text: String, forcePlain: Bool) -> Lyrics {
-        let parsed = LRCParser.parse(text)
-        guard forcePlain else { return parsed }
-        return Lyrics(
-            lines: parsed.lines.map { LyricLine(time: 0, text: $0.text) },
-            isSynced: false
-        )
+        forcePlain ? LRCParser.parsePlainText(text) : LRCParser.parse(text)
     }
 
     private func updateCurrentLyricLine(at time: TimeInterval) {

@@ -116,4 +116,42 @@ public enum LRCParser {
         let adjusted = timed.map { LyricLine(time: $0.time + offset, text: $0.text) }
         return Lyrics(lines: adjusted.sorted { $0.time < $1.time }, isSynced: true)
     }
+
+    /// Plain-text imports are shown line by line, even when the file happens to
+    /// contain bracket-looking timestamps. Timestamps are stripped, while
+    /// untimed lines are kept; blank lines and metadata tags are dropped and
+    /// every line is unsynced at time 0.
+    public static func parsePlainText(_ text: String) -> Lyrics {
+        let normalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+
+        var lines: [LyricLine] = []
+        for rawLine in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
+            var line = String(rawLine)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let trimmedRange = NSRange(trimmed.startIndex..<trimmed.endIndex, in: trimmed)
+            if metadataPattern.firstMatch(in: trimmed, range: trimmedRange) != nil {
+                continue
+            }
+
+            let fullRange = NSRange(line.startIndex..<line.endIndex, in: line)
+            line = timestampPattern.stringByReplacingMatches(
+                in: line,
+                range: fullRange,
+                withTemplate: ""
+            )
+            let cleanedRange = NSRange(line.startIndex..<line.endIndex, in: line)
+            line = offsetPattern.stringByReplacingMatches(
+                in: line,
+                range: cleanedRange,
+                withTemplate: ""
+            )
+            let text = line.trimmingCharacters(in: .whitespaces)
+            if !text.isEmpty {
+                lines.append(LyricLine(time: 0, text: text))
+            }
+        }
+        return Lyrics(lines: lines, isSynced: false)
+    }
 }

@@ -4,8 +4,9 @@ import Foundation
 /// On-disk lyrics cache under the app data directory's `lyrics/` folder.
 ///
 /// Online hits are keyed by title + artist + whole-second duration and survive
-/// relaunches, so a second play works offline. Manual overrides use the track
-/// UUID directly so they keep winning even after a rescan changes the path.
+/// relaunches, so a second play works offline. Manual overrides are keyed by
+/// the track UUID a rescan preserves for an unchanged file; a path change that
+/// assigns a new UUID starts without the old override.
 public final class LyricsCache {
     private let directory: URL
     private let manager: FileManager

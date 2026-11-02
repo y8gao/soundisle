@@ -35,6 +35,8 @@ public struct LRCLIBClient: LyricsFetching {
         guard let url = components?.url else { throw ClientError.invalidURL }
 
         var request = URLRequest(url: url)
+        // Keep a hung/offline lookup from holding the default 60s timeout.
+        request.timeoutInterval = 10
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await session.data(for: request)

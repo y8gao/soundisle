@@ -64,4 +64,12 @@ final class LRCParserTests: XCTestCase {
         let l = LRCParser.parse("[00:01.00]甲\r\n[00:02.00]乙\r\n")
         XCTAssertEqual(l.lines.map(\.time), [1, 2])
     }
+
+    func testPlainTextImportStripsTimestampsAndIsAlwaysUnsynced() {
+        let l = LRCParser.parsePlainText("[00:01.00]第一句\n第二句\n[ti:歌名]")
+
+        XCTAssertFalse(l.isSynced)
+        XCTAssertEqual(l.lines.map(\.text), ["第一句", "第二句"])
+        XCTAssertEqual(l.lines.map(\.time), [0, 0])
+    }
 }

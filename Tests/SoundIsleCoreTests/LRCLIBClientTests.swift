@@ -95,6 +95,7 @@ final class LRCLIBClientTests: XCTestCase {
         XCTAssertEqual(items["artist_name"], "阎维文 & Friends")
         XCTAssertEqual(items["duration"], "215")
         XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "SoundIsle/0.1")
+        XCTAssertEqual(request.timeoutInterval, 10)
         // URLComponents must percent-encode the Chinese title and the ampersand.
         XCTAssertTrue(request.url!.absoluteString.contains("track_name=%E6%AF%8D%E4%BA%B2"))
 
