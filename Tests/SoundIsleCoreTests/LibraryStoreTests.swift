@@ -190,6 +190,23 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(recovered.tracks, old.tracks)
     }
 
+    func testSavingAfterRecoveryNeverCopiesCorruptFileIntoBackup() throws {
+        let store = IndexStore(directory: dataDir)
+        let old = LibraryIndex(tracks: [sampleTrack()], folders: [libraryRoot])
+        let middle = LibraryIndex(tracks: [sampleTrack(), sampleTrack()], folders: [libraryRoot])
+        let latest = LibraryIndex(tracks: [sampleTrack(), sampleTrack(), sampleTrack()], folders: [libraryRoot])
+
+        try store.saveIndex(old)
+        try store.saveIndex(middle) // .bak == old
+        try Data("{".utf8).write(to: dataDir.appendingPathComponent("library.json"))
+        XCTAssertEqual(store.loadIndex().tracks, old.tracks)
+
+        try store.saveIndex(latest)
+        try Data("{".utf8).write(to: dataDir.appendingPathComponent("library.json"))
+
+        XCTAssertEqual(store.loadIndex().tracks, old.tracks)
+    }
+
     func testCorruptPlaylistsRecoversFromBackup() throws {
         let store = IndexStore(directory: dataDir)
         let first = Playlist(name: "旧列表", trackIDs: [UUID()])

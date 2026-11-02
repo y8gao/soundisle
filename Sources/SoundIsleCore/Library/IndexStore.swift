@@ -30,7 +30,7 @@ public final class IndexStore {
     }
 
     public func saveIndex(_ index: LibraryIndex) throws {
-        try write(encoder.encode(index), to: fileURL("library.json"))
+        try write(index, to: fileURL("library.json"))
     }
 
     // MARK: - Playlists
@@ -40,7 +40,7 @@ public final class IndexStore {
     }
 
     public func savePlaylists(_ playlists: [Playlist]) throws {
-        try write(encoder.encode(playlists), to: fileURL("playlists.json"))
+        try write(playlists, to: fileURL("playlists.json"))
     }
 
     // MARK: - Settings
@@ -50,7 +50,7 @@ public final class IndexStore {
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
-        try write(encoder.encode(settings), to: fileURL("settings.json"))
+        try write(settings, to: fileURL("settings.json"))
     }
 
     // MARK: - Atomic write and backup
@@ -66,7 +66,8 @@ public final class IndexStore {
         return nil
     }
 
-    private func write(_ data: Data, to url: URL) throws {
+    private func write<T: Codable>(_ value: T, to url: URL) throws {
+        let data = try encoder.encode(value)
         try manager.createDirectory(at: directory, withIntermediateDirectories: true)
         let temporary = url.appendingPathExtension("tmp")
         try data.write(to: temporary, options: .atomic)
@@ -77,9 +78,14 @@ public final class IndexStore {
             return
         }
 
-        let backup = url.appendingPathExtension("bak")
-        try? manager.removeItem(at: backup)
-        try manager.copyItem(at: url, to: backup)
+        // Rotate only a decodable file into `.bak`; a corrupt current file must
+        // never overwrite the last good backup.
+        if let current = try? Data(contentsOf: url),
+           (try? decoder.decode(T.self, from: current)) != nil {
+            let backup = url.appendingPathExtension("bak")
+            try? manager.removeItem(at: backup)
+            try manager.copyItem(at: url, to: backup)
+        }
         _ = try manager.replaceItemAt(url, withItemAt: temporary)
     }
 }
