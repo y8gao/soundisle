@@ -10,9 +10,11 @@
 
 #include "CTagLib.h"
 
+#include <taglib/aifffile.h>
 #include <taglib/apefile.h>
 #include <taglib/apeitem.h>
 #include <taglib/apetag.h>
+#include <taglib/asffile.h>
 #include <taglib/attachedpictureframe.h>
 #include <taglib/fileref.h>
 #include <taglib/flacfile.h>
@@ -420,7 +422,22 @@ TagLib::Tag *writableTag(TagLib::File *file)
         return nullptr;
     }
     if (auto *mpeg = dynamic_cast<TagLib::MPEG::File *>(file)) {
-        return mpeg->ID3v2Tag(true);
+        // A partial write to an ID3v1-only/APE-only MP3 must not hide the
+        // fields that read() reported: seed the new ID3v2 tag from the tag
+        // read() preferred before applying the incoming fields.
+        TagLib::Tag *existing = nullptr;
+        if (!mpeg->hasID3v2Tag()) {
+            if (mpeg->hasAPETag()) {
+                existing = mpeg->APETag();
+            } else if (mpeg->hasID3v1Tag()) {
+                existing = mpeg->ID3v1Tag();
+            }
+        }
+        TagLib::ID3v2::Tag *id3v2 = mpeg->ID3v2Tag(true);
+        if (existing && id3v2) {
+            TagLib::Tag::duplicate(existing, id3v2, false);
+        }
+        return id3v2;
     }
     if (auto *flac = dynamic_cast<TagLib::FLAC::File *>(file)) {
         return flac->xiphComment(true);
@@ -431,6 +448,11 @@ TagLib::Tag *writableTag(TagLib::File *file)
     if (auto *wav = dynamic_cast<TagLib::RIFF::WAV::File *>(file)) {
         // TagLib 1.13 cannot create an ID3v2 chunk in a WAV file that lacks one.
         return wav->ID3v2Tag();
+    }
+    if (auto *aiff = dynamic_cast<TagLib::RIFF::AIFF::File *>(file)) {
+        // AIFF's reader always installs an ID3v2 tag (even with no ID3 chunk),
+        // and AIFF::File::save() writes it, so untagged AIFF files can be tagged.
+        return aiff->tag();
     }
     return file->tag();
 }
@@ -528,8 +550,18 @@ String mimeTypeOf(const TagLib::ByteVector &data)
     return "image/jpeg";
 }
 
-bool pictureOf(TagLib::Tag *tag, TagLib::ByteVector &data)
+bool pictureOf(TagLib::File *file, TagLib::Tag *tag, TagLib::ByteVector &data)
 {
+    if (auto *flac = dynamic_cast<TagLib::FLAC::File *>(file)) {
+        const auto pictures = flac->pictureList();
+        for (auto it = pictures.begin(); it != pictures.end(); ++it) {
+            if (!(*it)->data().isEmpty()) {
+                data = (*it)->data();
+                return true;
+            }
+        }
+        // Fall through: some taggers store art in the Vorbis comment instead.
+    }
     if (!tag) {
         return false;
     }
@@ -580,9 +612,24 @@ bool pictureOf(TagLib::Tag *tag, TagLib::ByteVector &data)
     return false;
 }
 
-void setPicture(TagLib::Tag *tag, const TagLib::ByteVector &data)
+void setPicture(TagLib::File *file, TagLib::Tag *tag, const TagLib::ByteVector &data)
 {
     const String mime = mimeTypeOf(data);
+    if (auto *flac = dynamic_cast<TagLib::FLAC::File *>(file)) {
+        // FLAC keeps standard cover art in native PICTURE metadata blocks, not
+        // in the Vorbis comment; write there and drop any comment-stored copies
+        // so players cannot keep showing stale art.
+        flac->removePictures();
+        if (flac->hasXiphComment()) {
+            flac->xiphComment()->removeAllPictures();
+        }
+        auto *picture = new TagLib::FLAC::Picture;
+        picture->setMimeType(mime);
+        picture->setType(TagLib::FLAC::Picture::FrontCover);
+        picture->setData(data);
+        flac->addPicture(picture);
+        return;
+    }
     if (auto *id3 = dynamic_cast<TagLib::ID3v2::Tag *>(tag)) {
         id3->removeFrames("APIC");
         auto *frame = new TagLib::ID3v2::AttachedPictureFrame;
@@ -619,12 +666,32 @@ void setPicture(TagLib::Tag *tag, const TagLib::ByteVector &data)
     }
 }
 
+void clearPictures(TagLib::File *file, TagLib::Tag *tag)
+{
+    if (auto *flac = dynamic_cast<TagLib::FLAC::File *>(file)) {
+        flac->removePictures();
+        if (flac->hasXiphComment()) {
+            flac->xiphComment()->removeAllPictures();
+        }
+        return;
+    }
+    if (auto *id3 = dynamic_cast<TagLib::ID3v2::Tag *>(tag)) {
+        id3->removeFrames("APIC");
+    } else if (auto *xiph = dynamic_cast<TagLib::Ogg::XiphComment *>(tag)) {
+        xiph->removeAllPictures();
+    } else if (auto *mp4 = dynamic_cast<TagLib::MP4::Tag *>(tag)) {
+        mp4->removeItem("covr");
+    } else if (auto *ape = dynamic_cast<TagLib::APE::Tag *>(tag)) {
+        ape->removeItem("Cover Art (Front)");
+    }
+}
+
 // MARK: - Read / write
 
-std::string readJSON(TagLib::Tag *tag)
+std::string readJSON(TagLib::File *file, TagLib::Tag *tag)
 {
     TagLib::ByteVector artwork;
-    const bool hasArtwork = pictureOf(tag, artwork);
+    const bool hasArtwork = pictureOf(file, tag, artwork);
     const unsigned int year = tag ? tag->year() : 0;
     const unsigned int track = tag ? tag->track() : 0;
 
@@ -642,8 +709,14 @@ std::string readJSON(TagLib::Tag *tag)
     return json;
 }
 
-void applyFields(TagLib::Tag *tag, const JsonObject &object)
+bool applyFields(TagLib::File *file, TagLib::Tag *tag, const JsonObject &object,
+                 std::string &error)
 {
+    if (dynamic_cast<TagLib::ASF::File *>(file)
+        && (field(object, "albumArtist") || field(object, "artworkBase64"))) {
+        error = "该格式不支持写入专辑歌手或封面";
+        return false;
+    }
     if (auto *value = field(object, "title")) {
         tag->setTitle(stringValue(*value));
     }
@@ -672,11 +745,19 @@ void applyFields(TagLib::Tag *tag, const JsonObject &object)
         setAlbumArtist(tag, stringValue(*value));
     }
     if (auto *value = field(object, "artworkBase64")) {
-        std::string bytes;
-        if (base64Decode(value->text, bytes) && !bytes.empty()) {
-            setPicture(tag, TagLib::ByteVector(bytes.data(), static_cast<unsigned int>(bytes.size())));
+        if (value->text.empty()) {
+            clearPictures(file, tag);
+        } else {
+            std::string bytes;
+            if (!base64Decode(value->text, bytes) || bytes.empty()) {
+                error = "封面数据无效";
+                return false;
+            }
+            setPicture(file, tag,
+                       TagLib::ByteVector(bytes.data(), static_cast<unsigned int>(bytes.size())));
         }
     }
+    return true;
 }
 
 bool hasWritableField(const JsonObject &object)
@@ -715,7 +796,7 @@ char *soundisle_read_tags(const char *path)
     if (!tag) {
         tag = ref.tag();
     }
-    return ::strdup(readJSON(tag).c_str());
+    return ::strdup(readJSON(ref.file(), tag).c_str());
 }
 
 int soundisle_write_tags(const char *path, const char *json, char **error)
@@ -764,8 +845,10 @@ int soundisle_write_tags(const char *path, const char *json, char **error)
         if (ref.isNull() || !ref.file()) {
             message = "不支持的音频格式";
         } else if (TagLib::Tag *tag = writableTag(ref.file())) {
-            applyFields(tag, fields);
-            if (saveFile(ref.file())) {
+            std::string applyError;
+            if (!applyFields(ref.file(), tag, fields, applyError)) {
+                message = applyError;
+            } else if (saveFile(ref.file())) {
                 saved = true;
             } else {
                 message = "保存标签失败";
