@@ -3,6 +3,15 @@ import Combine
 import Foundation
 import SoundIsleCore
 
+/// What the sidebar has selected. One value instead of a pile of booleans so
+/// the list, the title and playback all agree on the current source.
+enum LibrarySelection: Hashable {
+    case allMusic
+    case recentlyAdded
+    case folder(URL)
+    case playlist(UUID)
+}
+
 /// App-wide state: the library on disk, the audio engine, the playback queue
 /// and the UI selections that tie them together.
 ///
@@ -12,6 +21,9 @@ import SoundIsleCore
 final class AppModel: ObservableObject {
     let library: LibraryStore
     let engine: PlayerEngine
+    /// In-memory playlist operations; every change is persisted through
+    /// `library.savePlaylists()`, the only writer of `playlists.json`.
+    let playlists: PlaylistStore
 
     @Published private(set) var queue = PlaybackQueue(trackIDs: [])
     @Published private(set) var currentTrack: Track?
@@ -21,7 +33,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var tracks: [Track] = []
     @Published private(set) var isPlaying = false
     @Published private(set) var isScanning = false
-    @Published var selectedFolder: URL?
+    @Published var selection: LibrarySelection = .allMusic
+    @Published var searchText = ""
+    @Published private(set) var sort: TrackSort = .title
+    @Published private(set) var sortAscending = true
+    /// Playlists keep their manual order until the user clicks a column header.
+    @Published private(set) var playlistSorting = false
     @Published var statusMessage: String?
     @Published var isSettingsPresented = false
     @Published var searchFocusRequest = UUID()
@@ -48,6 +65,11 @@ final class AppModel: ObservableObject {
 
         self.library = library
         self.engine = PlayerEngine()
+        self.playlists = PlaylistStore(playlists: library.playlists) { [weak library] playlists in
+            guard let library else { return }
+            library.playlists = playlists
+            library.savePlaylists()
+        }
 
         restorePlaybackState()
         engine.setVolume(Float(volume))
@@ -94,10 +116,163 @@ final class AppModel: ObservableObject {
         engine.duration > 0 ? engine.duration : (currentTrack?.duration ?? 0)
     }
 
+    var isPlaylistSelection: Bool {
+        if case .playlist = selection { return true }
+        return false
+    }
+
+    /// Column sorting has no visible effect on a manually ordered playlist.
+    var sortsColumns: Bool {
+        !isPlaylistSelection || playlistSorting
+    }
+
+    /// Reordering is only meaningful against the playlist's own order.
+    var canReorderPlaylist: Bool {
+        guard isPlaylistSelection, !playlistSorting else { return false }
+        return searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var visibleTracks: [Track] {
-        guard let folder = selectedFolder else { return tracks }
-        let prefix = folder.standardizedFileURL.path + "/"
-        return tracks.filter { $0.url.standardizedFileURL.path.hasPrefix(prefix) }
+        let source: [Track]
+        switch selection {
+        case .allMusic, .recentlyAdded:
+            source = tracks
+        case .folder(let folder):
+            let prefix = folder.standardizedFileURL.path + "/"
+            source = tracks.filter { $0.url.standardizedFileURL.path.hasPrefix(prefix) }
+        case .playlist(let id):
+            guard let playlist = playlists.playlists.first(where: { $0.id == id }) else { return [] }
+            var byID: [UUID: Track] = [:]
+            for track in tracks { byID[track.id] = track }
+            source = playlist.trackIDs.compactMap { byID[$0] }
+            if !playlistSorting {
+                return TrackQuery.filter(source, query: searchText)
+            }
+        }
+        return TrackQuery.apply(source, query: searchText, sort: sort, ascending: sortAscending)
+    }
+
+    func select(_ newSelection: LibrarySelection) {
+        selection = newSelection
+        switch newSelection {
+        case .recentlyAdded:
+            sort = .dateAdded
+            sortAscending = false
+        case .playlist:
+            playlistSorting = false
+        case .allMusic, .folder:
+            break
+        }
+    }
+
+    func toggleSort(_ newSort: TrackSort) {
+        if sort == newSort {
+            sortAscending.toggle()
+        } else {
+            sort = newSort
+            sortAscending = newSort != .dateAdded
+        }
+        if isPlaylistSelection {
+            playlistSorting = true
+        }
+    }
+
+    // MARK: - Playlists
+
+    @discardableResult
+    func createPlaylist(named name: String) -> Playlist {
+        let playlist = playlists.create(name: name)
+        objectWillChange.send()
+        return playlist
+    }
+
+    func renamePlaylist(id: UUID, to name: String) {
+        playlists.rename(id: id, to: name)
+        objectWillChange.send()
+    }
+
+    func deletePlaylist(id: UUID) {
+        playlists.delete(id: id)
+        if selection == .playlist(id) {
+            select(.allMusic)
+        }
+        objectWillChange.send()
+    }
+
+    func addToPlaylist(_ playlistID: UUID, trackIDs: [UUID]) {
+        guard !trackIDs.isEmpty else { return }
+        playlists.add(trackIDs: trackIDs, to: playlistID)
+        objectWillChange.send()
+        if let playlist = playlists.playlists.first(where: { $0.id == playlistID }) {
+            statusMessage = "已添加到「\(playlist.name)」"
+        }
+    }
+
+    func removeFromPlaylist(_ playlistID: UUID, trackID: UUID) {
+        playlists.remove(trackID: trackID, from: playlistID)
+        objectWillChange.send()
+    }
+
+    /// Drag-to-reorder inside a playlist: the dragged track takes the target's
+    /// slot in the playlist's own order.
+    func moveTrack(_ draggedID: UUID, onto targetID: UUID) {
+        guard case .playlist(let playlistID) = selection,
+              let playlist = playlists.playlists.first(where: { $0.id == playlistID }),
+              draggedID != targetID,
+              let from = playlist.trackIDs.firstIndex(of: draggedID),
+              let to = playlist.trackIDs.firstIndex(of: targetID) else { return }
+        playlists.move(from: from, to: to, in: playlistID)
+        objectWillChange.send()
+    }
+
+    /// AppKit saves us from macOS 13-only SwiftUI alert text fields.
+    func promptCreatePlaylist() {
+        guard let name = promptForPlaylistName(
+            title: "新建播放列表",
+            message: "输入播放列表名称。",
+            value: ""
+        ) else { return }
+        let playlist = createPlaylist(named: name)
+        select(.playlist(playlist.id))
+    }
+
+    func promptRenamePlaylist(id: UUID) {
+        guard let existing = playlists.playlists.first(where: { $0.id == id }),
+              let name = promptForPlaylistName(
+                  title: "重命名播放列表",
+                  message: "输入新的名称。",
+                  value: existing.name
+              ) else { return }
+        renamePlaylist(id: id, to: name)
+    }
+
+    func confirmDeletePlaylist(id: UUID) {
+        guard let existing = playlists.playlists.first(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = "删除播放列表「\(existing.name)」？"
+        alert.informativeText = "只会删除播放列表，歌曲文件不受影响。"
+        alert.addButton(withTitle: "删除")
+        alert.addButton(withTitle: "取消")
+        let response = alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .alertFirstButtonReturn else { return }
+        deletePlaylist(id: id)
+    }
+
+    private func promptForPlaylistName(title: String, message: String, value: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "确定")
+        alert.addButton(withTitle: "取消")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 230, height: 24))
+        field.stringValue = value
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        let response = alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .alertFirstButtonReturn else { return nil }
+        return field.stringValue
     }
 
     func trackCount(in folder: URL) -> Int {
@@ -164,6 +339,9 @@ final class AppModel: ObservableObject {
 
     private func refreshFromLibrary() {
         tracks = library.index.tracks
+        // Folder removal prunes playlist entries inside `LibraryStore`; mirror
+        // that so the in-memory store never resurrects deleted track IDs.
+        playlists.reload(library.playlists)
         guard let id = currentTrack?.id else { return }
         if let updated = tracks.first(where: { $0.id == id }) {
             currentTrack = updated
@@ -322,6 +500,16 @@ final class AppModel: ObservableObject {
         // The file loaded, so keep the queue on this track even if the audio
         // engine could not start; skipping ahead would hide the failure.
         return true
+    }
+
+    // MARK: - Playback modes
+
+    func setPlaybackMode(_ mode: PlaybackMode) {
+        guard queue.mode != mode else { return }
+        var updated = queue
+        updated.setMode(mode)
+        queue = updated
+        savePlaybackState()
     }
 
     // MARK: - Persistence

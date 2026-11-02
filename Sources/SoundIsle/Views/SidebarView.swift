@@ -1,7 +1,12 @@
+import SoundIsleCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @ObservedObject var model: AppModel
+    @State private var dropTargetID: UUID?
+
+    private var selection: LibrarySelection { model.selection }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -12,42 +17,44 @@ struct SidebarView: View {
                         title: "全部音乐",
                         icon: Icons.allMusic,
                         count: model.tracks.count,
-                        isSelected: model.selectedFolder == nil
+                        isSelected: selection == .allMusic
                     ) {
-                        model.selectedFolder = nil
+                        model.select(.allMusic)
+                    }
+                    libraryRow(
+                        title: "最近添加",
+                        icon: Icons.recent,
+                        count: model.tracks.count,
+                        isSelected: selection == .recentlyAdded
+                    ) {
+                        model.select(.recentlyAdded)
                     }
 
                     sectionLabel("导入文件夹").padding(.top, 12)
                     if model.folders.isEmpty {
-                        Text("尚未导入文件夹")
-                            .font(.system(size: 11.5))
-                            .foregroundColor(Theme.text.opacity(0.35))
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
+                        emptyRow("尚未导入文件夹")
                     } else {
                         ForEach(model.folders, id: \.self) { folder in
                             libraryRow(
                                 title: folder.lastPathComponent,
                                 icon: Icons.folder,
                                 count: model.trackCount(in: folder),
-                                isSelected: isSelected(folder)
+                                isSelected: selection == .folder(folder)
                             ) {
-                                model.selectedFolder = folder
+                                model.select(.folder(folder))
                             }
                             .help(folder.path)
                         }
                     }
 
-                    sectionLabel("播放列表").padding(.top, 12)
-                    HStack(spacing: 8) {
-                        Icons.playlist
-                            .foregroundColor(Theme.text.opacity(0.3))
-                        Text("暂无播放列表")
-                            .font(.system(size: 11.5))
-                            .foregroundColor(Theme.text.opacity(0.35))
+                    playlistsHeader
+                    if model.playlists.playlists.isEmpty {
+                        emptyRow("暂无播放列表")
+                    } else {
+                        ForEach(model.playlists.playlists) { playlist in
+                            playlistRow(playlist)
+                        }
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 10)
@@ -86,9 +93,82 @@ struct SidebarView: View {
         }
     }
 
-    private func isSelected(_ folder: URL) -> Bool {
-        guard let selected = model.selectedFolder else { return false }
-        return selected.standardizedFileURL == folder.standardizedFileURL
+    private var playlistsHeader: some View {
+        HStack(spacing: 0) {
+            sectionLabel("播放列表")
+            Spacer(minLength: 4)
+            Button {
+                model.promptCreatePlaylist()
+            } label: {
+                Icons.plus
+                    .foregroundColor(Theme.text.opacity(0.55))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("新建播放列表")
+            .padding(.trailing, 4)
+        }
+        .padding(.top, 12)
+    }
+
+    private func playlistRow(_ playlist: Playlist) -> some View {
+        libraryRow(
+            title: playlist.name,
+            icon: Icons.playlist,
+            count: playlist.trackIDs.count,
+            isSelected: selection == .playlist(playlist.id),
+            isDropTarget: dropTargetID == playlist.id
+        ) {
+            model.select(.playlist(playlist.id))
+        }
+        .contextMenu {
+            Button("重命名") { model.promptRenamePlaylist(id: playlist.id) }
+            Button("删除") { model.confirmDeletePlaylist(id: playlist.id) }
+        }
+        .onDrop(
+            of: [UTType.utf8PlainText],
+            isTargeted: Binding(
+                get: { dropTargetID == playlist.id },
+                set: { targeted in
+                    if targeted {
+                        dropTargetID = playlist.id
+                    } else if dropTargetID == playlist.id {
+                        dropTargetID = nil
+                    }
+                }
+            )
+        ) { providers in
+            guard handleTrackDrop(providers, into: playlist.id) else { return false }
+            dropTargetID = nil
+            return true
+        }
+    }
+
+    private func handleTrackDrop(_ providers: [NSItemProvider], into playlistID: UUID) -> Bool {
+        Task { @MainActor in
+            var trackIDs: [UUID] = []
+            for provider in providers {
+                if let text = await provider.textValue(),
+                   let id = UUID(uuidString: text) {
+                    trackIDs.append(id)
+                }
+            }
+            model.addToPlaylist(playlistID, trackIDs: trackIDs)
+        }
+        return true
+    }
+
+    private func emptyRow(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Icons.playlist
+                .foregroundColor(Theme.text.opacity(0.3))
+            Text(text)
+                .font(.system(size: 11.5))
+                .foregroundColor(Theme.text.opacity(0.35))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
     }
 
     private func sectionLabel(_ title: String) -> some View {
@@ -106,6 +186,7 @@ struct SidebarView: View {
         icon: Image,
         count: Int,
         isSelected: Bool,
+        isDropTarget: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -126,8 +207,14 @@ struct SidebarView: View {
             .padding(.horizontal, 9)
             .frame(height: 30)
             .background(
-                isSelected ? Theme.accent.opacity(0.16) : Color.clear,
+                isDropTarget
+                    ? Theme.accent.opacity(0.28)
+                    : (isSelected ? Theme.accent.opacity(0.16) : Color.clear),
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(Theme.accent.opacity(isDropTarget ? 0.6 : 0), lineWidth: 1)
             )
             .contentShape(Rectangle())
         }

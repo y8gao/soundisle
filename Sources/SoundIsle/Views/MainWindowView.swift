@@ -83,7 +83,6 @@ extension View {
 struct MainWindowView: View {
     @ObservedObject var model: AppModel
 
-    @State private var searchText = ""
     @FocusState private var searchFocused: Bool
     @State private var isDropTargeted = false
 
@@ -136,40 +135,43 @@ struct MainWindowView: View {
     }
 
     private var topBar: some View {
-        HStack(spacing: 12) {
-            Text("声屿")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Theme.text.opacity(0.8))
+        ZStack {
+            WindowDragArea()
+            HStack(spacing: 12) {
+                Text("声屿")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.text.opacity(0.8))
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 12)
 
-            HStack(spacing: 6) {
-                Icons.search
-                    .foregroundColor(Theme.text.opacity(0.45))
-                TextField("搜索歌曲、歌手、专辑", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.text)
-                    .focused($searchFocused)
+                HStack(spacing: 6) {
+                    Icons.search
+                        .foregroundColor(Theme.text.opacity(0.45))
+                    TextField("搜索歌曲、歌手、专辑", text: $model.searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.text)
+                        .focused($searchFocused)
+                }
+                .padding(.horizontal, 9)
+                .frame(width: 220, height: 26)
+                .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                )
+
+                Button {
+                    model.isSettingsPresented = true
+                } label: {
+                    Icons.settings
+                        .foregroundColor(Theme.text.opacity(0.7))
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("设置")
             }
-            .padding(.horizontal, 9)
-            .frame(width: 220, height: 26)
-            .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-            )
-
-            Button {
-                model.isSettingsPresented = true
-            } label: {
-                Icons.settings
-                    .foregroundColor(Theme.text.opacity(0.7))
-                    .frame(width: 26, height: 26)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("设置")
         }
         // Leave room for the traffic lights of the hidden title bar.
         .padding(.leading, 78)
@@ -219,7 +221,26 @@ struct MainWindowView: View {
     }
 }
 
-private extension NSItemProvider {
+extension NSItemProvider {
+    /// Track rows drag their track ID as plain text; sidebar playlists and
+    /// playlist rows accept it.
+    func textValue() async -> String? {
+        await withCheckedContinuation { continuation in
+            loadItem(forTypeIdentifier: UTType.utf8PlainText.identifier, options: nil) { item, _ in
+                if let data = item as? Data,
+                   let text = String(data: data, encoding: .utf8) {
+                    continuation.resume(returning: text)
+                } else if let text = item as? String {
+                    continuation.resume(returning: text)
+                } else if let text = item as? NSString {
+                    continuation.resume(returning: text as String)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
     func fileURLValue() async -> URL? {
         await withCheckedContinuation { continuation in
             loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
@@ -238,6 +259,23 @@ private extension NSItemProvider {
     }
 }
 
+// MARK: - Window dragging
+
+/// The frameless window is dragged from the top bar only, so track rows stay
+/// free to begin playlist drag sessions.
+private struct WindowDragArea: NSViewRepresentable {
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+    }
+
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 // MARK: - Window configuration
 
 /// Sets the 900x600 launch size, hides the title text and makes the whole
@@ -249,7 +287,10 @@ private struct WindowConfigurator: NSViewRepresentable {
             guard let window = view.window else { return }
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
-            window.isMovableByWindowBackground = true
+            // Rows must be able to start drag sessions; whole-window background
+            // dragging swallowed those gestures. The top bar carries its own
+            // drag area instead.
+            window.isMovableByWindowBackground = false
             window.backgroundColor = NSColor(
                 calibratedRed: 18 / 255,
                 green: 21 / 255,

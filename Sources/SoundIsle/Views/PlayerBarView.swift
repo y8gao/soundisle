@@ -26,7 +26,10 @@ struct PlayerBarView: View {
     var body: some View {
         HStack(spacing: 0) {
             trackInfo
-                .frame(width: 220, alignment: .leading)
+                .frame(width: 200, alignment: .leading)
+
+            modeControls
+                .padding(.leading, 10)
 
             Spacer(minLength: 0)
 
@@ -89,6 +92,27 @@ struct PlayerBarView: View {
         if track.isMissing { return "文件缺失" }
         let parts = [track.artist, track.album].filter { !$0.isEmpty }
         return parts.isEmpty ? " " : parts.joined(separator: " · ")
+    }
+
+    // MARK: Playback modes
+
+    private var modeControls: some View {
+        HStack(spacing: 2) {
+            modeButton(.sequential, icon: Icons.sequential, help: "顺序播放")
+            modeButton(.repeatAll, icon: Icons.repeatAll, help: "列表循环")
+            modeButton(.repeatOne, icon: Icons.repeatOne, help: "单曲循环")
+            modeButton(.shuffle, icon: Icons.shuffle, help: "随机播放")
+        }
+    }
+
+    private func modeButton(_ mode: PlaybackMode, icon: Image, help: String) -> some View {
+        PlaybackModeButton(
+            icon: icon,
+            help: help,
+            isSelected: model.queue.mode == mode
+        ) {
+            model.setPlaybackMode(mode)
+        }
     }
 
     // MARK: Center
@@ -177,6 +201,33 @@ private struct PlayerProgressView: View {
 }
 
 // MARK: - Buttons
+
+private struct PlaybackModeButton: View {
+    let icon: Image
+    let help: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            icon
+                .foregroundColor(
+                    isSelected ? Theme.accentLight : Theme.text.opacity(isHovering ? 0.9 : 0.45)
+                )
+                .frame(width: 24, height: 24)
+                .background(
+                    isSelected ? Theme.accent.opacity(0.18) : (isHovering ? Color.white.opacity(0.06) : Color.clear),
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(help)
+    }
+}
 
 private struct PlayerIconButton: View {
     let icon: Image

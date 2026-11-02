@@ -1,6 +1,8 @@
+import AppKit
 import Foundation
 import SoundIsleCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TrackListView: View {
     @ObservedObject var model: AppModel
@@ -8,6 +10,7 @@ struct TrackListView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            columnHeader
 
             if let message = model.statusMessage {
                 statusBanner(message)
@@ -24,8 +27,32 @@ struct TrackListView: View {
                                 index: index,
                                 isCurrent: model.currentTrack?.id == track.id,
                                 isPlaying: model.isPlaying,
+                                rowStyle: model.library.settings.rowStyle,
+                                artworkURL: model.library.artworkURL(for: track),
                                 onTap: { model.play(trackID: track.id) }
                             )
+                            .onDrag {
+                                NSItemProvider(object: track.id.uuidString as NSString)
+                            }
+                            .onDrop(of: [UTType.utf8PlainText], isTargeted: nil) { providers in
+                                handleReorder(providers, onto: track)
+                            }
+                            .contextMenu {
+                                if case .playlist(let playlistID) = model.selection {
+                                    Button("从播放列表移除") {
+                                        model.removeFromPlaylist(playlistID, trackID: track.id)
+                                    }
+                                }
+                                if !model.playlists.playlists.isEmpty {
+                                    Menu("添加到播放列表") {
+                                        ForEach(model.playlists.playlists) { playlist in
+                                            Button(playlist.name) {
+                                                model.addToPlaylist(playlist.id, trackIDs: [track.id])
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 18)
@@ -76,11 +103,58 @@ struct TrackListView: View {
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)
-        .padding(.bottom, 11)
+        .padding(.bottom, 8)
+    }
+
+    private var columnHeader: some View {
+        HStack(spacing: 2) {
+            sortButton("标题", .title)
+            sortButton("歌手", .artist)
+            sortButton("专辑", .album)
+            Spacer(minLength: 8)
+            sortButton("时长", .duration)
+            sortButton("添加时间", .dateAdded)
+        }
+        .padding(.horizontal, 18)
+        .padding(.bottom, 6)
+    }
+
+    private func sortButton(_ title: String, _ candidate: TrackSort) -> some View {
+        let active = model.sortsColumns && model.sort == candidate
+        return Button {
+            model.toggleSort(candidate)
+        } label: {
+            HStack(spacing: 3) {
+                Text(title)
+                if active {
+                    Icons.sortArrow(ascending: model.sortAscending)
+                }
+            }
+            .font(.system(size: 10.5, weight: active ? .semibold : .regular))
+            .foregroundColor(active ? Theme.accentLight : Theme.text.opacity(0.45))
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(
+                active ? Theme.accent.opacity(0.14) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("按\(title)排序")
     }
 
     private var title: String {
-        model.selectedFolder?.lastPathComponent ?? "全部音乐"
+        switch model.selection {
+        case .allMusic:
+            return "全部音乐"
+        case .recentlyAdded:
+            return "最近添加"
+        case .folder(let folder):
+            return folder.lastPathComponent
+        case .playlist(let id):
+            return model.playlists.playlists.first(where: { $0.id == id })?.name ?? "播放列表"
+        }
     }
 
     private var meta: String {
@@ -90,6 +164,18 @@ struct TrackListView: View {
         let minutes = (seconds % 3600) / 60
         let duration = hours > 0 ? "\(hours) 小时 \(minutes) 分" : "\(minutes) 分钟"
         return "\(tracks.count) 首 · \(duration)"
+    }
+
+    private func handleReorder(_ providers: [NSItemProvider], onto target: Track) -> Bool {
+        guard model.canReorderPlaylist else { return false }
+        Task { @MainActor in
+            for provider in providers {
+                guard let text = await provider.textValue(),
+                      let id = UUID(uuidString: text) else { continue }
+                model.moveTrack(id, onto: target.id)
+            }
+        }
+        return true
     }
 
     private func statusBanner(_ message: String) -> some View {
@@ -127,30 +213,31 @@ struct TrackListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        let searching = !model.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let playlistEmpty = model.isPlaylistSelection
+
+        return VStack(spacing: 12) {
             Spacer(minLength: 0)
             Icons.emptyLibrary
                 .foregroundColor(Theme.text.opacity(0.28))
-            Text(model.tracks.isEmpty ? "音乐库是空的" : "这个文件夹里没有歌曲")
+            Text(emptyTitle(searching: searching, playlistEmpty: playlistEmpty))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(Theme.text.opacity(0.85))
-            Text(
-                model.tracks.isEmpty
-                    ? "把音乐文件或文件夹拖到这里，或者选择一个文件夹。"
-                    : "换一个文件夹，或回到「全部音乐」。"
-            )
-            .font(.system(size: 12))
-            .foregroundColor(Theme.text.opacity(0.5))
-            .multilineTextAlignment(.center)
+            Text(emptyHint(searching: searching, playlistEmpty: playlistEmpty))
+                .font(.system(size: 12))
+                .foregroundColor(Theme.text.opacity(0.5))
+                .multilineTextAlignment(.center)
 
             Button {
-                if model.tracks.isEmpty {
+                if searching {
+                    model.searchText = ""
+                } else if model.tracks.isEmpty {
                     model.importFolders(model.openFolders())
                 } else {
-                    model.selectedFolder = nil
+                    model.select(.allMusic)
                 }
             } label: {
-                Text(model.tracks.isEmpty ? "选择文件夹" : "查看全部音乐")
+                Text(searching ? "清空搜索" : (model.tracks.isEmpty ? "选择文件夹" : "查看全部音乐"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(Theme.accentLight)
                     .padding(.horizontal, 16)
@@ -173,6 +260,20 @@ struct TrackListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
     }
+
+    private func emptyTitle(searching: Bool, playlistEmpty: Bool) -> String {
+        if searching { return "没有匹配的歌曲" }
+        if model.tracks.isEmpty { return "音乐库是空的" }
+        if playlistEmpty { return "这个播放列表还是空的" }
+        return "这个文件夹里没有歌曲"
+    }
+
+    private func emptyHint(searching: Bool, playlistEmpty: Bool) -> String {
+        if searching { return "换个关键词，或清空搜索框。" }
+        if model.tracks.isEmpty { return "把音乐文件或文件夹拖到这里，或者选择一个文件夹。" }
+        if playlistEmpty { return "回到「全部音乐」，把歌曲拖进侧栏的播放列表。" }
+        return "换一个文件夹，或回到「全部音乐」。"
+    }
 }
 
 // MARK: - Row
@@ -182,54 +283,56 @@ private struct TrackRow: View {
     let index: Int
     let isCurrent: Bool
     let isPlaying: Bool
+    let rowStyle: String
+    let artworkURL: URL?
     let onTap: () -> Void
 
     @State private var isHovering = false
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                leading
-                    .frame(width: 24)
+        // A plain row instead of a `Button`: a Button swallows the drag
+        // gesture, and dragging rows into playlists is required.
+        HStack(spacing: 10) {
+            leading
+                .frame(width: 24)
 
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(track.title)
-                            .font(.system(size: 12.5, weight: isCurrent ? .semibold : .regular))
-                            .foregroundColor(titleColor)
-                            .lineLimit(1)
-                        if track.isMissing {
-                            Text("文件缺失")
-                                .font(.system(size: 9.5, weight: .medium))
-                                .foregroundColor(Theme.warning)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Theme.warning.opacity(0.14), in: Capsule())
-                        }
-                    }
-                    if !track.artist.isEmpty {
-                        Text(track.artist)
-                            .font(.system(size: 10.5))
-                            .foregroundColor(Theme.text.opacity(0.5))
-                            .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(track.title)
+                        .font(.system(size: 12.5, weight: isCurrent ? .semibold : .regular))
+                        .foregroundColor(titleColor)
+                        .lineLimit(1)
+                    if track.isMissing {
+                        Text("文件缺失")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(Theme.warning)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Theme.warning.opacity(0.14), in: Capsule())
                     }
                 }
-
-                Spacer(minLength: 8)
-
-                Text(TimeText.string(track.duration))
-                    .font(.system(size: 10.5))
-                    .monospacedDigit()
-                    .foregroundColor(Theme.text.opacity(0.45))
-                    .frame(width: 46, alignment: .trailing)
+                if !track.artist.isEmpty {
+                    Text(track.artist)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(Theme.text.opacity(0.5))
+                        .lineLimit(1)
+                }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .frame(minHeight: 36)
-            .background(rowBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-            .contentShape(Rectangle())
+
+            Spacer(minLength: 8)
+
+            Text(TimeText.string(track.duration))
+                .font(.system(size: 10.5))
+                .monospacedDigit()
+                .foregroundColor(Theme.text.opacity(0.45))
+                .frame(width: 46, alignment: .trailing)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(minHeight: 36)
+        .background(rowBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
         .onHover { isHovering = $0 }
     }
 
@@ -237,6 +340,8 @@ private struct TrackRow: View {
     private var leading: some View {
         if isCurrent {
             PlayingIndicator(isPlaying: isPlaying)
+        } else if rowStyle == "cover" {
+            ArtworkThumbnail(url: artworkURL)
         } else {
             Text("\(index + 1)")
                 .font(.system(size: 10.5))
@@ -254,6 +359,36 @@ private struct TrackRow: View {
         if isCurrent { return Theme.accent.opacity(0.13) }
         if isHovering { return Color.white.opacity(0.04) }
         return .clear
+    }
+}
+
+// MARK: - Cover thumbnail
+
+private struct ArtworkThumbnail: View {
+    let url: URL?
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Theme.coverGradient)
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Icons.coverNote
+                    .foregroundColor(Color.white.opacity(0.55))
+            }
+        }
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .onAppear(perform: load)
+        .onChange(of: url) { _ in load() }
+    }
+
+    private func load() {
+        image = url.flatMap { NSImage(contentsOf: $0) }
     }
 }
 

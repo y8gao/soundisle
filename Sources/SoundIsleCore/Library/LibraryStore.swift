@@ -178,12 +178,21 @@ public final class LibraryStore {
         }
     }
 
-    private func savePlaylists() {
+    /// Single writer for `playlists.json`: `AppModel` syncs its `PlaylistStore`
+    /// back into `playlists` and calls this, so no second `IndexStore` exists.
+    public func savePlaylists() {
         do {
             try store.savePlaylists(playlists)
         } catch {
             lastError = error
         }
+    }
+
+    /// Cached cover for a track, when the artwork file still exists.
+    public func artworkURL(for track: Track) -> URL? {
+        guard let name = track.artworkFileName else { return nil }
+        let url = coversDirectory.appendingPathComponent(name)
+        return manager.fileExists(atPath: url.path) ? url : nil
     }
 
     private func artworkData(for tracks: [Track], reader: MetadataReading) async -> [String: Data] {
