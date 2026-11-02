@@ -67,6 +67,35 @@ final class TagServiceTests: XCTestCase {
         return Data(bytes)
     }
 
+    /// Minimal RIFF/WAVE shell with only chunk headers, enough to exercise the
+    /// ID3-chunk capability probe.
+    private func makeWAV(withID3: Bool) throws -> URL {
+        var data = Data("RIFF".utf8)
+        data.append(contentsOf: [0, 0, 0, 0])
+        data.append(Data("WAVE".utf8))
+
+        func appendChunk(_ id: String, _ payload: Data) {
+            data.append(Data(id.utf8))
+            let size = UInt32(payload.count)
+            data.append(contentsOf: [
+                UInt8(size & 0xFF),
+                UInt8((size >> 8) & 0xFF),
+                UInt8((size >> 16) & 0xFF),
+                UInt8((size >> 24) & 0xFF),
+            ])
+            data.append(payload)
+            if payload.count % 2 == 1 { data.append(0) }
+        }
+
+        if withID3 { appendChunk("id3 ", Data("ID3".utf8)) }
+        appendChunk("fmt ", Data(repeating: 0, count: 16))
+        appendChunk("data", Data())
+
+        let url = tempDir.appendingPathComponent("fixture-\(UUID().uuidString).wav")
+        try data.write(to: url)
+        return url
+    }
+
     /// Counts native FLAC PICTURE metadata blocks (type 6).
     private func flacPictureBlockCount(_ url: URL) throws -> Int {
         let data = try Data(contentsOf: url)
@@ -108,6 +137,33 @@ final class TagServiceTests: XCTestCase {
         let data = TagService.jsonData(from: fields)
         let decoded = try JSONDecoder().decode(TagFields.self, from: data)
         XCTAssertEqual(decoded, fields)
+    }
+
+    func testWAVWithoutID3ChunkIsReportedReadOnly() throws {
+        let url = try makeWAV(withID3: false)
+        let capabilities = TagFormatCapabilities.capabilities(for: url)
+        XCTAssertFalse(capabilities.canWrite)
+        XCTAssertFalse(capabilities.canWriteArtwork)
+        XCTAssertNotNil(capabilities.limitation)
+    }
+
+    func testWAVWithID3ChunkIsWritable() throws {
+        let url = try makeWAV(withID3: true)
+        let capabilities = TagFormatCapabilities.capabilities(for: url)
+        XCTAssertTrue(capabilities.canWrite)
+        XCTAssertTrue(capabilities.canWriteArtwork)
+    }
+
+    func testASFAndUnknownFormatsReportLimitations() {
+        let asf = TagFormatCapabilities.capabilities(for: URL(fileURLWithPath: "/tmp/a.wma"))
+        XCTAssertTrue(asf.canWrite)
+        XCTAssertFalse(asf.canWriteAlbumArtist)
+        XCTAssertFalse(asf.canWriteArtwork)
+        XCTAssertNotNil(asf.limitation)
+
+        let unknown = TagFormatCapabilities.capabilities(for: URL(fileURLWithPath: "/tmp/a.xyz"))
+        XCTAssertFalse(unknown.canWrite)
+        XCTAssertNotNil(unknown.limitation)
     }
 
     func testWriteToNonAudioFileThrows() throws {

@@ -130,7 +130,10 @@ struct MainWindowView: View {
             model.savePlaybackState()
         }
         .sheet(isPresented: $model.isSettingsPresented) {
-            SettingsView()
+            SettingsView(model: model)
+        }
+        .sheet(item: $model.tagEditorRequest) { request in
+            TagEditorView(model: model, tracks: request.tracks)
         }
     }
 

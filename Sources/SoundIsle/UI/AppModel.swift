@@ -13,6 +13,13 @@ enum LibrarySelection: Hashable {
     case playlist(UUID)
 }
 
+/// A pending tag-editor sheet. `Identifiable` so `.sheet(item:)` recreates the
+/// editor whenever the user opens it for a different selection.
+struct TagEditorRequest: Identifiable {
+    let id = UUID()
+    let tracks: [Track]
+}
+
 /// App-wide state: the library on disk, the audio engine, the playback queue
 /// and the UI selections that tie them together.
 ///
@@ -25,6 +32,8 @@ final class AppModel: ObservableObject {
     /// In-memory playlist operations; every change is persisted through
     /// `library.savePlaylists()`, the only writer of `playlists.json`.
     let playlists: PlaylistStore
+    let tagService = TagService()
+    let tagUndoStore: TagEditUndoStore
 
     @Published private(set) var queue = PlaybackQueue(trackIDs: [])
     @Published private(set) var currentTrack: Track?
@@ -35,6 +44,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var isScanning = false
     @Published var selection: LibrarySelection = .allMusic
+    /// Multi-selection: ⌘-click toggles, Shift-click extends from the anchor.
+    /// A plain click still plays and collapses the selection to one row.
+    @Published private(set) var selectedTrackIDs: Set<UUID> = []
+    @Published var tagEditorRequest: TagEditorRequest?
+    @Published private(set) var tagUndoCount = 0
     @Published var searchText = ""
     @Published private(set) var sort: TrackSort = .title
     @Published private(set) var sortAscending = true
@@ -71,6 +85,8 @@ final class AppModel: ObservableObject {
     private var saveTimer: Timer?
     private var keyMonitor: Any?
     private var didStart = false
+    /// Anchor row for Shift-click range selection.
+    private var selectionAnchorID: UUID?
     /// Lyrics resolution is fully async; switching tracks cancels the previous
     /// lookup and ignores its late result.
     private let lyricsCache: LyricsCache
@@ -90,6 +106,9 @@ final class AppModel: ObservableObject {
 
         self.library = library
         self.engine = PlayerEngine()
+        self.tagUndoStore = TagEditUndoStore(
+            directory: directory.appendingPathComponent("undo", isDirectory: true)
+        )
         self.playlists = PlaylistStore(playlists: library.playlists) { [weak library] playlists in
             guard let library else { return }
             library.playlists = playlists
@@ -102,6 +121,7 @@ final class AppModel: ObservableObject {
         self.lyricsService = LyricsService(cache: lyricsCache, client: LRCLIBClient())
 
         restorePlaybackState()
+        tagUndoCount = tagUndoStore.entries.count
         isLyricsLocked = library.settings.lyricsLocked
         engine.setVolume(Float(volume))
         observeEngine()
@@ -187,6 +207,8 @@ final class AppModel: ObservableObject {
 
     func select(_ newSelection: LibrarySelection) {
         selection = newSelection
+        selectedTrackIDs = []
+        selectionAnchorID = nil
         switch newSelection {
         case .recentlyAdded:
             sort = .dateAdded
@@ -208,6 +230,192 @@ final class AppModel: ObservableObject {
         if isPlaylistSelection {
             playlistSorting = true
         }
+    }
+
+    // MARK: - Track selection
+
+    /// A row click. ⌘ toggles one row, Shift extends from the last clicked
+    /// row, and a plain click keeps the usual single-click playback while
+    /// collapsing the selection.
+    func handleTrackClick(_ trackID: UUID, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) {
+        if modifiers.contains(.command) {
+            if selectedTrackIDs.contains(trackID) {
+                selectedTrackIDs.remove(trackID)
+            } else {
+                selectedTrackIDs.insert(trackID)
+            }
+            selectionAnchorID = trackID
+            return
+        }
+        if modifiers.contains(.shift), let anchor = selectionAnchorID,
+           let from = visibleTracks.firstIndex(where: { $0.id == anchor }),
+           let to = visibleTracks.firstIndex(where: { $0.id == trackID }) {
+            let range = from <= to ? from...to : to...from
+            selectedTrackIDs = Set(visibleTracks[range].map(\.id))
+            return
+        }
+        selectedTrackIDs = [trackID]
+        selectionAnchorID = trackID
+        play(trackID: trackID)
+    }
+
+    /// Rows a context-menu action applies to: the whole selection when the
+    /// clicked row belongs to it, otherwise only the clicked row.
+    func contextTrackIDs(for trackID: UUID) -> [UUID] {
+        guard selectedTrackIDs.contains(trackID) else { return [trackID] }
+        let ordered = visibleTracks.map(\.id).filter { selectedTrackIDs.contains($0) }
+        return ordered.isEmpty ? [trackID] : ordered
+    }
+
+    // MARK: - Tag editing
+
+    func beginTagEdit(trackIDs: [UUID]) {
+        let ids = Set(trackIDs)
+        let targets = visibleTracks.filter { ids.contains($0.id) }
+        guard !targets.isEmpty else { return }
+        tagEditorRequest = TagEditorRequest(tracks: targets)
+    }
+
+    var canUndoTagEdit: Bool { tagUndoCount > 0 }
+
+    func clearTagUndoHistory() {
+        do {
+            try tagUndoStore.clear()
+            tagUndoCount = 0
+            statusMessage = "已清空编辑撤销记录。"
+        } catch {
+            statusMessage = "清空编辑撤销记录失败：\(error.localizedDescription)"
+        }
+    }
+
+    func undoLastTagEdit() {
+        do {
+            guard let entry = try tagUndoStore.undoLast() else {
+                statusMessage = "没有可撤销的标签编辑。"
+                return
+            }
+            tagUndoCount = tagUndoStore.entries.count
+            updateIndex(
+                for: entry.url,
+                fields: entry.before,
+                artworkChanged: entry.before.artworkBase64 != entry.after.artworkBase64
+            )
+            refreshFromLibrary()
+            statusMessage = "已撤销对《\(entry.url.lastPathComponent)》的标签编辑。"
+        } catch {
+            tagUndoCount = tagUndoStore.entries.count
+            statusMessage = "撤销失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// Applies `edits` to every track. Fields left nil are not modified.
+    /// Returns a Chinese summary on failure, or nil when every write succeeded.
+    func applyTagEdit(_ edits: TagFields, to tracks: [Track]) -> String? {
+        guard !tracks.isEmpty else { return "没有选择歌曲。" }
+        var changed: [(track: Track, before: TagFields, after: TagFields)] = []
+        var failures: [String] = []
+        var undoFailures = 0
+
+        for track in tracks {
+            guard let before = tagService.read(from: track.url) else {
+                failures.append("《\(track.title)》无法读取标签")
+                continue
+            }
+            var after = before
+            if let value = edits.title { after.title = Self.nonEmpty(value) }
+            if let value = edits.artist { after.artist = Self.nonEmpty(value) }
+            if let value = edits.album { after.album = Self.nonEmpty(value) }
+            if let value = edits.albumArtist { after.albumArtist = Self.nonEmpty(value) }
+            if let value = edits.genre { after.genre = Self.nonEmpty(value) }
+            if let value = edits.year { after.year = value > 0 ? value : nil }
+            if let value = edits.trackNumber { after.trackNumber = value > 0 ? value : nil }
+            if let value = edits.artworkBase64 {
+                after.artworkBase64 = value.isEmpty ? nil : value
+            }
+            guard after != before else { continue }
+
+            do {
+                // Partial write: TagService leaves omitted fields untouched,
+                // and the C bridge swaps in a temporary copy atomically.
+                try tagService.write(edits, to: track.url)
+            } catch {
+                failures.append("《\(track.title)》\(error.localizedDescription)")
+                continue
+            }
+            changed.append((track, before, after))
+            do {
+                try tagUndoStore.record(
+                    TagUndoEntry(url: track.url, before: before, after: after)
+                )
+            } catch {
+                undoFailures += 1
+            }
+        }
+
+        tagUndoCount = tagUndoStore.entries.count
+        for item in changed {
+            updateIndex(
+                for: item.track.url,
+                fields: item.after,
+                artworkChanged: item.before.artworkBase64 != item.after.artworkBase64
+            )
+        }
+        if !changed.isEmpty {
+            refreshFromLibrary()
+        }
+
+        var notes = failures
+        if undoFailures > 0 {
+            notes.append("\(undoFailures) 首的撤销记录保存失败")
+        }
+        guard !notes.isEmpty else {
+            statusMessage = changed.isEmpty ? "没有需要修改的标签。" : "已更新 \(changed.count) 首歌曲的标签。"
+            return nil
+        }
+        let summary = "已更新 \(changed.count) 首，\(notes.count) 项失败：\(notes.prefix(2).joined(separator: "；"))"
+        statusMessage = summary
+        return summary
+    }
+
+    /// Keeps the library index in step with the file that was just written so
+    /// the list shows new values without a full rescan.
+    private func updateIndex(for url: URL, fields: TagFields, artworkChanged: Bool) {
+        let standardized = url.standardizedFileURL
+        guard let track = library.index.tracks.first(where: {
+            $0.url.standardizedFileURL == standardized
+        }) else { return }
+
+        var updated = track
+        if let title = fields.title, !title.isEmpty {
+            updated.title = title
+        }
+        updated.artist = fields.artist ?? ""
+        updated.album = fields.album ?? ""
+        updated.albumArtist = fields.albumArtist
+        updated.year = fields.year
+        updated.trackNumber = fields.trackNumber
+        updated.genre = fields.genre
+        if artworkChanged {
+            library.setArtwork(
+                fields.artworkBase64.flatMap { Data(base64Encoded: $0) },
+                for: track.id
+            )
+            updated.artworkFileName = library.index.tracks
+                .first(where: { $0.id == track.id })?.artworkFileName
+        }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: standardized.path)
+        if let size = (attributes?[.size] as? NSNumber)?.int64Value {
+            updated.fileSize = size
+        }
+        if let date = attributes?[.modificationDate] as? Date {
+            updated.modifiedAt = date
+        }
+        library.updateTrack(updated)
+    }
+
+    private static func nonEmpty(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - Playlists
@@ -375,6 +583,11 @@ final class AppModel: ObservableObject {
         // Folder removal prunes playlist entries inside `LibraryStore`; mirror
         // that so the in-memory store never resurrects deleted track IDs.
         playlists.reload(library.playlists)
+        let validIDs = Set(tracks.map(\.id))
+        let pruned = selectedTrackIDs.intersection(validIDs)
+        if pruned != selectedTrackIDs {
+            selectedTrackIDs = pruned
+        }
         guard let id = currentTrack?.id else { return }
         if let updated = tracks.first(where: { $0.id == id }) {
             currentTrack = updated

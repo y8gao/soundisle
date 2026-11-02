@@ -26,10 +26,11 @@ struct TrackListView: View {
                                 track: track,
                                 index: index,
                                 isCurrent: model.currentTrack?.id == track.id,
+                                isSelected: model.selectedTrackIDs.contains(track.id),
                                 isPlaying: model.isPlaying,
                                 rowStyle: model.library.settings.rowStyle,
                                 artworkURL: model.library.artworkURL(for: track),
-                                onTap: { model.play(trackID: track.id) }
+                                onTap: { model.handleTrackClick(track.id) }
                             )
                             .onDrag {
                                 NSItemProvider(object: track.id.uuidString as NSString)
@@ -38,16 +39,27 @@ struct TrackListView: View {
                                 handleReorder(providers, onto: track)
                             }
                             .contextMenu {
+                                Button("编辑标签…") {
+                                    model.beginTagEdit(
+                                        trackIDs: model.contextTrackIDs(for: track.id)
+                                    )
+                                }
+                                Divider()
                                 if case .playlist(let playlistID) = model.selection {
                                     Button("从播放列表移除") {
-                                        model.removeFromPlaylist(playlistID, trackID: track.id)
+                                        for id in model.contextTrackIDs(for: track.id) {
+                                            model.removeFromPlaylist(playlistID, trackID: id)
+                                        }
                                     }
                                 }
                                 if !model.playlists.playlists.isEmpty {
                                     Menu("添加到播放列表") {
                                         ForEach(model.playlists.playlists) { playlist in
                                             Button(playlist.name) {
-                                                model.addToPlaylist(playlist.id, trackIDs: [track.id])
+                                                model.addToPlaylist(
+                                                    playlist.id,
+                                                    trackIDs: model.contextTrackIDs(for: track.id)
+                                                )
                                             }
                                         }
                                     }
@@ -282,6 +294,7 @@ private struct TrackRow: View {
     let track: Track
     let index: Int
     let isCurrent: Bool
+    let isSelected: Bool
     let isPlaying: Bool
     let rowStyle: String
     let artworkURL: URL?
@@ -357,6 +370,7 @@ private struct TrackRow: View {
 
     private var rowBackground: Color {
         if isCurrent { return Theme.accent.opacity(0.13) }
+        if isSelected { return Theme.accent.opacity(0.09) }
         if isHovering { return Color.white.opacity(0.04) }
         return .clear
     }

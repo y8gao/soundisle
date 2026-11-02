@@ -64,4 +64,5 @@ enum Icons {
     static var settingsCache: Image { symbol("internaldrive", size: 18) }
     static var settingsLyrics: Image { symbol("text.alignleft", size: 18) }
     static var settingsAppearance: Image { symbol("paintpalette", size: 18) }
+    static var settingsTags: Image { symbol("tag", size: 18) }
 }

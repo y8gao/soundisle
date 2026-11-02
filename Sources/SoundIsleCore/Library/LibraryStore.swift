@@ -195,6 +195,22 @@ public final class LibraryStore {
         return manager.fileExists(atPath: url.path) ? url : nil
     }
 
+    /// Replaces or removes the cached cover after a tag edit, so the list shows
+    /// the new artwork without a full rescan. `nil` deletes the cached file.
+    public func setArtwork(_ data: Data?, for trackID: UUID) {
+        guard let position = index.tracks.firstIndex(where: { $0.id == trackID }) else { return }
+        var track = index.tracks[position]
+        if let data {
+            guard let name = saveArtwork(data, for: trackID) else { return }
+            track.artworkFileName = name
+        } else {
+            deleteArtwork(track)
+            track.artworkFileName = nil
+        }
+        index.tracks[position] = track
+        saveIndex()
+    }
+
     private func artworkData(for tracks: [Track], reader: MetadataReading) async -> [String: Data] {
         guard !tracks.isEmpty else { return [:] }
         var result: [String: Data] = [:]

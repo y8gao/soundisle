@@ -1,7 +1,10 @@
+import AppKit
 import SwiftUI
 
-/// Placeholder shell for the settings screen. Tasks 6-14 fill each section in.
+/// Settings shell. Tasks 12-14 fill the remaining sections in; tag editing
+/// already exposes its undo controls here.
 struct SettingsView: View {
+    @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
     private struct Section {
@@ -38,6 +41,8 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(spacing: 10) {
+                    tagEditingSection
+
                     ForEach(sections.indices, id: \.self) { index in
                         let section = sections[index]
                         HStack(spacing: 13) {
@@ -67,5 +72,51 @@ struct SettingsView: View {
         .frame(width: 520, height: 440)
         .background(AppBackground())
         .preferredColorScheme(.dark)
+    }
+
+    private var tagEditingSection: some View {
+        HStack(alignment: .top, spacing: 13) {
+            Icons.settingsTags
+                .foregroundColor(Theme.accent)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("标签编辑")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.text)
+                Text("每次保存都会记录修改前后的标签，最多保留 50 条。")
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.text.opacity(0.5))
+                HStack(spacing: 10) {
+                    Button("撤销最近一次标签编辑") {
+                        model.undoLastTagEdit()
+                    }
+                    .disabled(!model.canUndoTagEdit)
+
+                    Button("清空编辑撤销记录") {
+                        confirmClearUndo()
+                    }
+                    .disabled(model.tagUndoCount == 0)
+
+                    Text("\(model.tagUndoCount) 条记录")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(Theme.text.opacity(0.4))
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .glassPanel(cornerRadius: 10)
+    }
+
+    private func confirmClearUndo() {
+        let alert = NSAlert()
+        alert.messageText = "清空编辑撤销记录？"
+        alert.informativeText = "清空后无法再撤销之前保存的标签修改，音频文件本身不受影响。"
+        alert.addButton(withTitle: "清空")
+        alert.addButton(withTitle: "取消")
+        let response = alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .alertFirstButtonReturn else { return }
+        model.clearTagUndoHistory()
     }
 }
