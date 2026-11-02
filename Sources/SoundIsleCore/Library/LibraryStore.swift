@@ -144,6 +144,23 @@ public final class LibraryStore {
         saveIndex()
     }
 
+    /// Fills in durations read by ffprobe after a scan. Tracks that already
+    /// know their duration are left alone, and one save covers the batch.
+    public func updateDurations(_ durations: [UUID: TimeInterval]) {
+        guard !durations.isEmpty else { return }
+        var changed = false
+        for position in index.tracks.indices {
+            guard let duration = durations[index.tracks[position].id],
+                  duration > 0,
+                  index.tracks[position].duration <= 0 else { continue }
+            index.tracks[position].duration = duration
+            changed = true
+        }
+        if changed {
+            saveIndex()
+        }
+    }
+
     /// Points tracks at new file locations after an organize (or its undo).
     /// IDs and playlist membership are untouched, so playlists keep working.
     /// Keys are matched standardized, and one save covers the whole batch.

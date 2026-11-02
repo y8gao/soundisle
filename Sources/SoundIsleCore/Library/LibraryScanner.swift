@@ -10,20 +10,27 @@ public struct ScanResult {
     }
 }
 
+/// Which extensions AVFoundation can open directly and which need the FFmpeg
+/// fallback. The scanner and the transcode queue share this one list.
+public enum AudioFormatSupport {
+    public static let nativeExtensions: Set<String> = [
+        "mp3", "m4a", "m4r", "aac", "wav", "aiff", "aif", "flac", "mp4", "alac",
+    ]
+
+    public static let fallbackExtensions: Set<String> = [
+        "ape", "wma", "ogg", "oga", "opus", "wv", "tta", "dsf", "dff",
+    ]
+
+    public static let supportedExtensions: Set<String> =
+        nativeExtensions.union(fallbackExtensions)
+
+    public static func isNative(_ url: URL) -> Bool {
+        nativeExtensions.contains(url.pathExtension.lowercased())
+    }
+}
+
 public enum LibraryScanner {
-    public static let supportedExtensions: Set<String> = [
-        "mp3", "m4a", "m4r", "aac", "wav", "aiff", "aif", "flac", "alac", "mp4",
-        "ape", "wma", "ogg", "oga", "opus", "wv", "tta", "dsf", "dff",
-    ]
-
-    /// Formats AVFoundation can read directly. Derived by subtraction so it can
-    /// never list an extension outside `supportedExtensions`.
-    private static let nonNativeExtensions: Set<String> = [
-        "ape", "wma", "ogg", "oga", "opus", "wv", "tta", "dsf", "dff",
-    ]
-
-    private static let nativeExtensions: Set<String> =
-        supportedExtensions.subtracting(nonNativeExtensions)
+    public static let supportedExtensions = AudioFormatSupport.supportedExtensions
 
     public static func scan(
         folders: [URL],
@@ -34,7 +41,7 @@ public enum LibraryScanner {
         var byIndex: [Int: AudioMetadata] = [:]
         await withTaskGroup(of: (Int, AudioMetadata?).self) { group in
             for (index, url) in urls.enumerated()
-            where nativeExtensions.contains(url.pathExtension.lowercased()) {
+            where AudioFormatSupport.isNative(url) {
                 group.addTask {
                     (index, await reader.read(url: url))
                 }
@@ -47,7 +54,7 @@ public enum LibraryScanner {
         var tracks: [Track] = []
         var unreadable: [URL] = []
         for (index, url) in urls.enumerated() {
-            if nativeExtensions.contains(url.pathExtension.lowercased()) {
+            if AudioFormatSupport.isNative(url) {
                 if let metadata = byIndex[index] {
                     tracks.append(TrackFactory.make(url: url, metadata: metadata))
                 } else {

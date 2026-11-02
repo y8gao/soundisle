@@ -196,27 +196,48 @@ struct TrackListView: View {
     }
 
     private func statusBanner(_ message: String) -> some View {
-        HStack(spacing: 8) {
-            Icons.warning
-                .foregroundColor(Theme.warning)
-            Text(message)
-                .font(.system(size: 11.5))
-                .foregroundColor(Theme.text.opacity(0.82))
-                .lineLimit(2)
-            Spacer(minLength: 6)
-            Button {
-                model.dismissStatus()
-            } label: {
-                Icons.close
-                    .foregroundColor(Theme.text.opacity(0.5))
-                    .frame(width: 18, height: 18)
-                    .contentShape(Rectangle())
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Icons.warning
+                    .foregroundColor(Theme.warning)
+                Text(message)
+                    .font(.system(size: 11.5))
+                    .foregroundColor(Theme.text.opacity(0.82))
+                    .lineLimit(2)
+                Spacer(minLength: 6)
+                Button {
+                    model.dismissStatus()
+                } label: {
+                    Icons.close
+                        .foregroundColor(Theme.text.opacity(0.5))
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("关闭")
             }
-            .buttonStyle(.plain)
-            .help("关闭")
+            if model.showsFFmpegInstallPrompt {
+                HStack(spacing: 12) {
+                    Button("复制 brew install ffmpeg") {
+                        model.copyFFmpegInstallCommand()
+                    }
+                    Button("重新检测") {
+                        model.redetectFFmpeg()
+                    }
+                    Button("选择 FFmpeg…") {
+                        model.chooseFFmpegPath()
+                    }
+                    Text("原生格式仍可正常播放")
+                        .foregroundColor(Theme.text.opacity(0.45))
+                    Spacer(minLength: 0)
+                }
+                .font(.system(size: 10.5))
+                .buttonStyle(.plain)
+                .foregroundColor(Theme.accentLight)
+            }
         }
         .padding(.horizontal, 11)
-        .frame(minHeight: 30)
+        .padding(.vertical, 7)
         .background(
             Theme.warning.opacity(0.12),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)

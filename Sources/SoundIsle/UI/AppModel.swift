@@ -42,6 +42,8 @@ final class AppModel: ObservableObject {
     let tagService = TagService()
     let tagUndoStore: TagEditUndoStore
     let organizer: FileOrganizer
+    /// Serial background transcoder for formats AVFoundation cannot read.
+    let transcode: TranscodeQueue
 
     @Published private(set) var queue = PlaybackQueue(trackIDs: [])
     @Published private(set) var currentTrack: Track?
@@ -65,6 +67,9 @@ final class AppModel: ObservableObject {
     /// Playlists keep their manual order until the user clicks a column header.
     @Published private(set) var playlistSorting = false
     @Published var statusMessage: String?
+    /// The missing-ffmpeg banner adds install/retry/choose-path actions.
+    @Published private(set) var showsFFmpegInstallPrompt = false
+    @Published private(set) var transcodeCacheBytes: Int64 = 0
     @Published var isSettingsPresented = false
     /// Lyrics overlay state. Task 8 renders the overlay; the menu bar already
     /// drives these through the hooks below.
@@ -105,6 +110,10 @@ final class AppModel: ObservableObject {
     /// Set after a successful override removal so the resolve outcome can
     /// replace the status message.
     private var pendingRestoreTrackID: UUID?
+    private let transcodeRoot: URL
+    /// The non-native track waiting for ffmpeg, retried once it is found.
+    private var pendingTranscodeTrack: Track?
+    private var preparingTrackID: UUID?
 
     // MARK: - Lifecycle
 
@@ -119,6 +128,13 @@ final class AppModel: ObservableObject {
         let undoDirectory = directory.appendingPathComponent("undo", isDirectory: true)
         self.tagUndoStore = TagEditUndoStore(directory: undoDirectory)
         self.organizer = FileOrganizer(undo: OrganizeUndoStore(directory: undoDirectory))
+        let transcodeRoot = directory.appendingPathComponent("transcode", isDirectory: true)
+        try? FileManager.default.createDirectory(at: transcodeRoot, withIntermediateDirectories: true)
+        self.transcodeRoot = transcodeRoot
+        self.transcode = TranscodeQueue(
+            cacheRoot: transcodeRoot,
+            ffmpeg: FFmpegLocator.find(customPath: library.settings.ffmpegPath)
+        )
         self.playlists = PlaylistStore(playlists: library.playlists) { [weak library] playlists in
             guard let library else { return }
             library.playlists = playlists
@@ -138,6 +154,7 @@ final class AppModel: ObservableObject {
         observeEngine()
         loadLyrics(for: currentTrack)
         installKeyMonitor()
+        refreshTranscodeCacheSize()
     }
 
     deinit {
@@ -690,6 +707,7 @@ final class AppModel: ObservableObject {
         }
         isScanning = false
         refreshFromLibrary()
+        prepareLibraryFormats()
     }
 
     func rescan() async {
@@ -698,6 +716,7 @@ final class AppModel: ObservableObject {
         await library.rescan()
         isScanning = false
         refreshFromLibrary()
+        prepareLibraryFormats()
     }
 
     private func refreshFromLibrary() {
@@ -788,28 +807,30 @@ final class AppModel: ObservableObject {
     }
 
     /// First play after a restore: the engine was deliberately left unloaded
-    /// at launch, so load now and jump to the remembered position.
+    /// at launch, so load now and jump to the remembered position. Non-native
+    /// tracks that are already cached take the same path; uncached ones are
+    /// prepared first.
     private func resumeCurrent(_ track: Track) {
         guard !track.isMissing else {
             statusMessage = "《\(track.title)》文件缺失，无法播放。"
             return
         }
-        do {
-            try engine.load(url: track.url)
-        } catch {
-            statusMessage = "无法播放《\(track.title)》：\(engine.lastError ?? "未知错误")"
+        let position = restoredPosition
+        let url: URL?
+        if AudioFormatSupport.isNative(track.url) {
+            url = track.url
+        } else {
+            url = transcode.cachedURL(for: track)
+        }
+        guard let url else {
+            _ = startTrack(track)
             return
         }
-        if restoredPosition > 0 {
-            engine.seek(to: restoredPosition)
+        guard loadAndPlay(track, url: url) else { return }
+        if position > 0 {
+            engine.seek(to: position)
         }
-        engine.play()
-        if engine.isPlaying {
-            restoredPosition = 0
-            statusMessage = nil
-        } else {
-            statusMessage = startFailureStatus
-        }
+        restoredPosition = 0
     }
 
     func next() {
@@ -859,12 +880,73 @@ final class AppModel: ObservableObject {
             statusMessage = "曲目不在音乐库中。"
             return false
         }
+        return startTrack(track)
+    }
+
+    /// Starts a track, routing fallback formats through the transcode cache.
+    /// Returns true when the track was accepted, including the asynchronous
+    /// "preparing" case, so `next()`/`previous()` do not skip past it.
+    @discardableResult
+    private func startTrack(_ track: Track) -> Bool {
         guard !track.isMissing else {
             statusMessage = "《\(track.title)》文件缺失，已跳过。"
             return false
         }
+
+        if AudioFormatSupport.isNative(track.url) {
+            showsFFmpegInstallPrompt = false
+            pendingTranscodeTrack = nil
+            return loadAndPlay(track, url: track.url)
+        }
+        if let cached = transcode.cachedURL(for: track) {
+            showsFFmpegInstallPrompt = false
+            pendingTranscodeTrack = nil
+            return loadAndPlay(track, url: cached)
+        }
+        guard let ffmpeg = FFmpegLocator.find(customPath: library.settings.ffmpegPath) else {
+            // Leave the current song alone: a missing dependency must never
+            // freeze the UI or block formats AVFoundation can play.
+            pendingTranscodeTrack = track
+            showsFFmpegInstallPrompt = true
+            statusMessage = "需要 FFmpeg 才能播放此格式（《\(track.title)》）。"
+            return true
+        }
+
+        transcode.updateFFmpeg(ffmpeg)
+        engine.unload()
+        currentTrack = track
+        restoredPosition = 0
+        showsFFmpegInstallPrompt = false
+        statusMessage = "正在准备《\(track.title)》…"
+        preparingTrackID = track.id
+
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let url = try await self.transcode.ensureCached(track)
+                guard self.preparingTrackID == track.id,
+                      self.currentTrack?.id == track.id else { return }
+                self.preparingTrackID = nil
+                _ = self.loadAndPlay(track, url: url)
+            } catch {
+                guard self.preparingTrackID == track.id else { return }
+                self.preparingTrackID = nil
+                if case TranscodeError.ffmpegMissing = error {
+                    self.pendingTranscodeTrack = track
+                    self.showsFFmpegInstallPrompt = true
+                    self.statusMessage = "需要 FFmpeg 才能播放此格式（《\(track.title)》）。"
+                } else {
+                    self.statusMessage = "无法准备《\(track.title)》：\(error.localizedDescription)"
+                }
+            }
+        }
+        return true
+    }
+
+    private func loadAndPlay(_ track: Track, url: URL) -> Bool {
+        preparingTrackID = nil
         do {
-            try engine.load(url: track.url)
+            try engine.load(url: url)
         } catch {
             statusMessage = "无法播放《\(track.title)》：\(engine.lastError ?? "未知错误")"
             return false
@@ -890,6 +972,143 @@ final class AppModel: ObservableObject {
         updated.setMode(mode)
         queue = updated
         savePlaybackState()
+    }
+
+    // MARK: - Transcode cache & FFmpeg
+
+    var ffmpegPathText: String {
+        FFmpegLocator.find(customPath: library.settings.ffmpegPath)?.path ?? "未找到"
+    }
+
+    var transcodeCacheSizeText: String {
+        transcodeCacheBytes > 0
+            ? ByteCountFormatter.string(fromByteCount: transcodeCacheBytes, countStyle: .file)
+            : "0 MB"
+    }
+
+    func refreshTranscodeCacheSize() {
+        transcodeCacheBytes = TranscodeCache.directorySize(transcodeRoot)
+    }
+
+    @discardableResult
+    func clearTranscodeCache() -> String {
+        let message: String
+        if transcode.isProcessing {
+            message = "正在准备歌曲，请稍后再清理缓存。"
+        } else {
+            let freed = TranscodeCache.directorySize(transcodeRoot)
+            do {
+                try transcode.clearCache()
+                refreshTranscodeCacheSize()
+                let size = freed > 0
+                    ? ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+                    : "0 MB"
+                message = "已清理转码缓存（\(size)）。"
+            } catch {
+                message = "清理转码缓存失败：\(error.localizedDescription)"
+            }
+        }
+        statusMessage = message
+        return message
+    }
+
+    /// 「重新检测」: users normally run `brew install ffmpeg` and come back.
+    @discardableResult
+    func redetectFFmpeg() -> String {
+        guard let found = FFmpegLocator.find(customPath: library.settings.ffmpegPath) else {
+            showsFFmpegInstallPrompt = true
+            let message = "仍未找到 FFmpeg，请先运行 brew install ffmpeg。"
+            statusMessage = message
+            return message
+        }
+        transcode.updateFFmpeg(found)
+        showsFFmpegInstallPrompt = false
+        let message = "已找到 FFmpeg：\(found.path)"
+        statusMessage = message
+        prepareLibraryFormats()
+        retryPendingTranscode()
+        objectWillChange.send()
+        return message
+    }
+
+    /// Returns nil when the picker was cancelled.
+    @discardableResult
+    func chooseFFmpegPath() -> String? {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "选择"
+        panel.message = "选择 ffmpeg 可执行文件"
+        let response = panel.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .OK, let url = panel.url else { return nil }
+        guard FileManager.default.isExecutableFile(atPath: url.path) else {
+            let message = "所选文件不可执行，请选择 ffmpeg 可执行文件。"
+            statusMessage = message
+            return message
+        }
+        library.settings.ffmpegPath = url.path
+        library.saveSettings()
+        transcode.updateFFmpeg(url)
+        showsFFmpegInstallPrompt = false
+        let message = "已使用 FFmpeg：\(url.path)"
+        statusMessage = message
+        prepareLibraryFormats()
+        retryPendingTranscode()
+        objectWillChange.send()
+        return message
+    }
+
+    func copyFFmpegInstallCommand() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString("brew install ffmpeg", forType: .string)
+        statusMessage = "已复制安装命令：brew install ffmpeg"
+    }
+
+    private func retryPendingTranscode() {
+        guard let track = pendingTranscodeTrack else { return }
+        pendingTranscodeTrack = nil
+        _ = startTrack(track)
+    }
+
+    /// After a scan: fill durations for fallback formats and transcode them in
+    /// the background. Without ffmpeg the tracks stay indexed with a duration
+    /// of 0 and playback of native formats is unaffected.
+    private func prepareLibraryFormats() {
+        guard let ffmpeg = FFmpegLocator.find(customPath: library.settings.ffmpegPath) else {
+            return
+        }
+        transcode.updateFFmpeg(ffmpeg)
+        for track in tracks
+        where !track.isMissing && !AudioFormatSupport.isNative(track.url) {
+            transcode.enqueue(track, priority: false)
+        }
+        fillDurations(using: ffmpeg)
+        refreshTranscodeCacheSize()
+    }
+
+    private func fillDurations(using ffmpeg: URL) {
+        let pending = tracks.filter {
+            !$0.isMissing && $0.duration <= 0 && !AudioFormatSupport.isNative($0.url)
+        }
+        guard !pending.isEmpty else { return }
+
+        Task { [weak self] in
+            let durations = await Task.detached(priority: .utility) { () -> [UUID: TimeInterval] in
+                var result: [UUID: TimeInterval] = [:]
+                for track in pending {
+                    if let duration = FFprobeReader.duration(of: track.url, ffmpeg: ffmpeg) {
+                        result[track.id] = duration
+                    }
+                }
+                return result
+            }.value
+            guard let self, !durations.isEmpty else { return }
+            self.library.updateDurations(durations)
+            self.refreshFromLibrary()
+        }
     }
 
     // MARK: - Lyrics
@@ -1203,6 +1422,8 @@ final class AppModel: ObservableObject {
 
     func dismissStatus() {
         statusMessage = nil
+        showsFFmpegInstallPrompt = false
+        pendingTranscodeTrack = nil
     }
 
     private func installKeyMonitor() {

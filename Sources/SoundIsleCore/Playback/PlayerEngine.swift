@@ -164,6 +164,23 @@ public final class PlayerEngine: ObservableObject {
         stopPositionTimer()
     }
 
+    /// Drops the loaded file. Used while a non-native track is being prepared,
+    /// so the player bar shows the pending track instead of the previous one
+    /// and pressing play cannot resume the old song.
+    public func unload() {
+        generation += 1
+        playerNode.stop()
+        engine?.stop()
+        stopPositionTimer()
+        file = nil
+        segmentScheduled = false
+        duration = 0
+        position = 0
+        pausedPosition = 0
+        isPlaying = false
+        spectrum = Array(repeating: 0, count: Self.bandCount)
+    }
+
     public func seek(to time: TimeInterval) {
         guard let file else { return }
         lastError = nil
