@@ -105,7 +105,7 @@ struct MainWindowView: View {
             return true
         }
         .preferredColorScheme(.dark)
-        .background(WindowConfigurator())
+        .background(WindowConfigurator(model: model))
         .onAppear { model.start() }
         .onChange(of: model.searchFocusRequest) { _ in
             searchFocused = true
@@ -262,8 +262,8 @@ extension NSItemProvider {
 // MARK: - Window dragging
 
 /// The frameless window is dragged from the top bar only, so track rows stay
-/// free to begin playlist drag sessions.
-private struct WindowDragArea: NSViewRepresentable {
+/// free to begin playlist drag sessions. The mini player reuses it too.
+struct WindowDragArea: NSViewRepresentable {
     final class DragView: NSView {
         override var mouseDownCanMoveWindow: Bool { true }
 
@@ -278,11 +278,47 @@ private struct WindowDragArea: NSViewRepresentable {
 
 // MARK: - Window configuration
 
-/// Sets the 900x600 launch size, hides the title text and makes the whole
-/// background draggable while keeping the traffic-light buttons.
+/// Sets the 900x600 launch size, hides the title text, makes the top bar
+/// draggable, and parks the window instead of destroying it when the user
+/// closes it while "关闭后继续运行" is on.
 private struct WindowConfigurator: NSViewRepresentable {
+    let model: AppModel
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(model: model)
+    }
+
+    final class Coordinator: NSObject, NSWindowDelegate {
+        let model: AppModel
+        weak var originalDelegate: NSWindowDelegate?
+
+        init(model: AppModel) {
+            self.model = model
+        }
+
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            guard model.library.settings.keepRunningOnClose else { return true }
+            sender.orderOut(nil)
+            return false
+        }
+
+        /// Keep SwiftUI's own window delegate working for every other
+        /// callback by forwarding what this coordinator does not implement.
+        override func responds(to aSelector: Selector!) -> Bool {
+            super.responds(to: aSelector) || (originalDelegate?.responds(to: aSelector) ?? false)
+        }
+
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            if let originalDelegate, originalDelegate.responds(to: aSelector) {
+                return originalDelegate
+            }
+            return super.forwardingTarget(for: aSelector)
+        }
+    }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        let coordinator = context.coordinator
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             window.titlebarAppearsTransparent = true
@@ -304,6 +340,8 @@ private struct WindowConfigurator: NSViewRepresentable {
             // space and arrow keys belong to playback until search is clicked.
             window.initialFirstResponder = nil
             window.makeFirstResponder(nil)
+            coordinator.originalDelegate = window.delegate
+            window.delegate = coordinator
         }
         return view
     }

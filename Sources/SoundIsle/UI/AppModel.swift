@@ -41,6 +41,10 @@ final class AppModel: ObservableObject {
     @Published private(set) var playlistSorting = false
     @Published var statusMessage: String?
     @Published var isSettingsPresented = false
+    /// Lyrics overlay state. Task 8 renders the overlay; the menu bar already
+    /// drives these through the hooks below.
+    @Published private(set) var isLyricsVisible = false
+    @Published private(set) var isLyricsLocked = false
     @Published var searchFocusRequest = UUID()
     @Published var endSearchFocusRequest = UUID()
     /// Mirrors the SwiftUI focus state of the search field so the local key
@@ -380,10 +384,18 @@ final class AppModel: ObservableObject {
     }
 
     func togglePlayPause() {
+        if engine.isPlaying {
+            pause()
+        } else {
+            play()
+        }
+    }
+
+    /// Explicit play, for the media-key "play" command (as opposed to the
+    /// toggle command that F8 sends).
+    func play() {
         if let current = currentTrack {
-            if engine.isPlaying {
-                engine.pause()
-            } else if engine.duration > 0 {
+            if engine.duration > 0 {
                 engine.play()
                 if engine.isPlaying {
                     statusMessage = nil
@@ -401,6 +413,10 @@ final class AppModel: ObservableObject {
         } else {
             statusMessage = "音乐库是空的，先导入一个文件夹。"
         }
+    }
+
+    func pause() {
+        engine.pause()
     }
 
     private var startFailureStatus: String {
@@ -510,6 +526,30 @@ final class AppModel: ObservableObject {
         updated.setMode(mode)
         queue = updated
         savePlaybackState()
+    }
+
+    // MARK: - Lyrics (Task 8 fills the overlay, the menu already calls these)
+
+    func toggleLyricsVisibility() {
+        setLyricsVisible(!isLyricsVisible)
+    }
+
+    func setLyricsVisible(_ visible: Bool) {
+        guard isLyricsVisible != visible else { return }
+        isLyricsVisible = visible
+        // ponytail: Task 8 replaces this placeholder with the real overlay.
+        statusMessage = "歌词功能将在后续版本提供。"
+    }
+
+    func toggleLyricsLock() {
+        setLyricsLocked(!isLyricsLocked)
+    }
+
+    func setLyricsLocked(_ locked: Bool) {
+        guard isLyricsLocked != locked else { return }
+        isLyricsLocked = locked
+        // ponytail: Task 8 replaces this placeholder with the real overlay.
+        statusMessage = "歌词功能将在后续版本提供。"
     }
 
     // MARK: - Persistence
