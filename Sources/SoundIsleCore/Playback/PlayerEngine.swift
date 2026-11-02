@@ -21,7 +21,10 @@ public final class PlayerEngine: ObservableObject {
 
     private static let fftSize = 1024
 
-    private let engine = AVAudioEngine()
+    /// Created on first use. Building an `AVAudioEngine` talks to CoreAudio's
+    /// HAL, which can block for seconds during app launch; deferring it keeps
+    /// the first window frame instant and playback startup predictable.
+    private var engine: AVAudioEngine?
     private let playerNode = AVAudioPlayerNode()
     private let fft = vDSP.FFT(log2n: vDSP_Length(10), radix: .radix2, ofType: DSPSplitComplex.self)
     private let window: [Float]
@@ -39,17 +42,25 @@ public final class PlayerEngine: ObservableObject {
         var window = [Float](repeating: 0, count: Self.fftSize)
         vDSP_hann_window(&window, vDSP_Length(Self.fftSize), Int32(vDSP_HANN_NORM))
         self.window = window
-
-        engine.attach(playerNode)
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Self.fftSize), format: nil) { [weak self] buffer, _ in
-            self?.handleTap(buffer)
-        }
     }
 
     deinit {
         positionTimer?.invalidate()
-        engine.stop()
-        engine.mainMixerNode.removeTap(onBus: 0)
+        if let engine {
+            engine.stop()
+            engine.mainMixerNode.removeTap(onBus: 0)
+        }
+    }
+
+    private func ensureEngine() -> AVAudioEngine {
+        if let engine { return engine }
+        let engine = AVAudioEngine()
+        engine.attach(playerNode)
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Self.fftSize), format: nil) { [weak self] buffer, _ in
+            self?.handleTap(buffer)
+        }
+        self.engine = engine
+        return engine
     }
 
     // MARK: - Controls
@@ -59,7 +70,7 @@ public final class PlayerEngine: ObservableObject {
 
         generation += 1
         playerNode.stop()
-        engine.stop()
+        engine?.stop()
         stopPositionTimer()
 
         self.file = file
@@ -69,12 +80,14 @@ public final class PlayerEngine: ObservableObject {
         isPlaying = false
         spectrum = Array(repeating: 0, count: Self.bandCount)
 
+        let engine = ensureEngine()
         engine.connect(playerNode, to: engine.mainMixerNode, format: file.processingFormat)
         scheduleSegment(fromFrame: 0)
     }
 
     public func play() {
         guard file != nil else { return }
+        let engine = ensureEngine()
         if !engine.isRunning {
             engine.prepare()
             do {
@@ -107,6 +120,7 @@ public final class PlayerEngine: ObservableObject {
 
     public func seek(to time: TimeInterval) {
         guard let file else { return }
+        let engine = ensureEngine()
         let wasPlaying = isPlaying
         let clamped = min(max(time, 0), duration)
         let frame = min(AVAudioFramePosition(clamped * file.processingFormat.sampleRate), file.length)
