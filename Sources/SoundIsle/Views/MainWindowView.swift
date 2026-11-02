@@ -135,6 +135,9 @@ struct MainWindowView: View {
         .sheet(item: $model.tagEditorRequest) { request in
             TagEditorView(model: model, tracks: request.tracks)
         }
+        .sheet(item: $model.organizerRequest) { request in
+            OrganizerPreviewView(model: model, tracks: request.tracks)
+        }
     }
 
     private var topBar: some View {

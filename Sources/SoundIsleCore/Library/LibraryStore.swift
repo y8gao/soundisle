@@ -144,6 +144,29 @@ public final class LibraryStore {
         saveIndex()
     }
 
+    /// Points tracks at new file locations after an organize (or its undo).
+    /// IDs and playlist membership are untouched, so playlists keep working.
+    /// Keys are matched standardized, and one save covers the whole batch.
+    public func updateTrackURLs(_ mapping: [URL: URL]) {
+        guard !mapping.isEmpty else { return }
+        var normalized: [URL: URL] = [:]
+        for (source, destination) in mapping {
+            normalized[source.standardizedFileURL] = destination.standardizedFileURL
+        }
+
+        var changed = false
+        for position in index.tracks.indices {
+            let current = index.tracks[position].url.standardizedFileURL
+            guard let destination = normalized[current] else { continue }
+            index.tracks[position].url = destination
+            index.tracks[position].isMissing = false
+            changed = true
+        }
+        if changed {
+            saveIndex()
+        }
+    }
+
     public func removeMissingTracks() {
         removeTracks { $0.isMissing }
     }

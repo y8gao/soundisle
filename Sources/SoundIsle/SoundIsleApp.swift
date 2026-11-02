@@ -24,6 +24,7 @@ struct SoundIsleApp: App {
                 .keyboardShortcut(",", modifiers: .command)
             }
             LyricsCommands(model: appDelegate.model)
+            FileOrganizerCommands(model: appDelegate.model)
         }
     }
 }
@@ -49,6 +50,21 @@ private struct LyricsCommands: Commands {
                 model.retryLyrics()
             }
             .disabled(model.currentTrack == nil || model.isResolvingLyrics)
+        }
+    }
+}
+
+/// 「撤销上次整理」 lives in the File menu so it is reachable after the
+/// preview sheet closes. Observed so the item enables when a plan is recorded.
+private struct FileOrganizerCommands: Commands {
+    @ObservedObject var model: AppModel
+
+    var body: some Commands {
+        CommandGroup(after: .newItem) {
+            Button("撤销上次整理") {
+                model.undoLastOrganize()
+            }
+            .disabled(!model.canUndoOrganize)
         }
     }
 }

@@ -44,6 +44,11 @@ struct TrackListView: View {
                                         trackIDs: model.contextTrackIDs(for: track.id)
                                     )
                                 }
+                                Button("整理文件…") {
+                                    model.beginOrganize(
+                                        trackIDs: model.contextTrackIDs(for: track.id)
+                                    )
+                                }
                                 Divider()
                                 if case .playlist(let playlistID) = model.selection {
                                     Button("从播放列表移除") {

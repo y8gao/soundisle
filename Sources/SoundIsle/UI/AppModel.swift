@@ -20,6 +20,13 @@ struct TagEditorRequest: Identifiable {
     let tracks: [Track]
 }
 
+/// A pending file-organizer preview. Built once per presentation so editing
+/// the template re-plans against a stable selection.
+struct OrganizerRequest: Identifiable {
+    let id = UUID()
+    let tracks: [Track]
+}
+
 /// App-wide state: the library on disk, the audio engine, the playback queue
 /// and the UI selections that tie them together.
 ///
@@ -34,6 +41,7 @@ final class AppModel: ObservableObject {
     let playlists: PlaylistStore
     let tagService = TagService()
     let tagUndoStore: TagEditUndoStore
+    let organizer: FileOrganizer
 
     @Published private(set) var queue = PlaybackQueue(trackIDs: [])
     @Published private(set) var currentTrack: Track?
@@ -49,6 +57,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var selectedTrackIDs: Set<UUID> = []
     @Published var tagEditorRequest: TagEditorRequest?
     @Published private(set) var tagUndoCount = 0
+    @Published var organizerRequest: OrganizerRequest?
+    @Published private(set) var organizeUndoCount = 0
     @Published var searchText = ""
     @Published private(set) var sort: TrackSort = .title
     @Published private(set) var sortAscending = true
@@ -106,9 +116,9 @@ final class AppModel: ObservableObject {
 
         self.library = library
         self.engine = PlayerEngine()
-        self.tagUndoStore = TagEditUndoStore(
-            directory: directory.appendingPathComponent("undo", isDirectory: true)
-        )
+        let undoDirectory = directory.appendingPathComponent("undo", isDirectory: true)
+        self.tagUndoStore = TagEditUndoStore(directory: undoDirectory)
+        self.organizer = FileOrganizer(undo: OrganizeUndoStore(directory: undoDirectory))
         self.playlists = PlaylistStore(playlists: library.playlists) { [weak library] playlists in
             guard let library else { return }
             library.playlists = playlists
@@ -122,6 +132,7 @@ final class AppModel: ObservableObject {
 
         restorePlaybackState()
         tagUndoCount = tagUndoStore.entries.count
+        organizeUndoCount = organizer.undo.entries.count
         isLyricsLocked = library.settings.lyricsLocked
         engine.setVolume(Float(volume))
         observeEngine()
@@ -420,6 +431,83 @@ final class AppModel: ObservableObject {
     private static func nonEmpty(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    // MARK: - File organizing
+
+    func beginOrganize(trackIDs: [UUID]) {
+        let ids = Set(trackIDs)
+        let targets = visibleTracks.filter { ids.contains($0.id) && !$0.isMissing }
+        guard !targets.isEmpty else {
+            statusMessage = "没有可整理的歌曲。"
+            return
+        }
+        organizerRequest = OrganizerRequest(tracks: targets)
+    }
+
+    var canUndoOrganize: Bool { organizeUndoCount > 0 }
+
+    /// Executes a previewed plan and points the affected tracks at their new
+    /// URLs. Returns a Chinese error for the sheet, or nil on success.
+    func performOrganize(_ items: [OrganizePlanItem], copy: Bool) -> String? {
+        guard !items.isEmpty else { return "没有需要整理的文件。" }
+        do {
+            try organizer.apply(items, copy: copy)
+        } catch {
+            // A mid-run failure still moved the earlier rows; keep the index
+            // truthful for those before showing the error.
+            if let organizeError = error as? OrganizeError,
+               case let .applyFailed(applied, _) = organizeError {
+                updateTrackURLs(for: applied)
+            }
+            organizeUndoCount = organizer.undo.entries.count
+            let message = error.localizedDescription
+            statusMessage = message
+            return message
+        }
+
+        updateTrackURLs(for: items)
+        organizeUndoCount = organizer.undo.entries.count
+        statusMessage = copy
+            ? "已复制 \(items.count) 个文件。"
+            : "已移动 \(items.count) 个文件，可用「撤销上次整理」恢复。"
+        return nil
+    }
+
+    @discardableResult
+    func undoLastOrganize() -> String {
+        do {
+            guard let items = try organizer.undoLast() else {
+                let message = "没有可撤销的整理。"
+                statusMessage = message
+                return message
+            }
+            // Undo put files back at `source`; flip the mapping direction.
+            let mapping = Dictionary(uniqueKeysWithValues: items.map {
+                ($0.destination.standardizedFileURL, $0.source.standardizedFileURL)
+            })
+            library.updateTrackURLs(mapping)
+            refreshFromLibrary()
+            organizeUndoCount = organizer.undo.entries.count
+            let message = "已撤销上次整理，\(items.count) 个文件已恢复原位。"
+            statusMessage = message
+            return message
+        } catch {
+            organizeUndoCount = organizer.undo.entries.count
+            let message = error.localizedDescription
+            statusMessage = message
+            return message
+        }
+    }
+
+    private func updateTrackURLs(for items: [OrganizePlanItem]) {
+        guard !items.isEmpty else { return }
+        var mapping: [URL: URL] = [:]
+        for item in items {
+            mapping[item.source.standardizedFileURL] = item.destination.standardizedFileURL
+        }
+        library.updateTrackURLs(mapping)
+        refreshFromLibrary()
     }
 
     // MARK: - Playlists
