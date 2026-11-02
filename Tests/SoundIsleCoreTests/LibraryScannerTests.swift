@@ -33,6 +33,67 @@ final class LibraryScannerTests: XCTestCase {
         return url
     }
 
+    private func metadataItem(_ identifier: AVMetadataIdentifier, value: Any) -> AVMetadataItem {
+        let item = AVMutableMetadataItem()
+        item.identifier = identifier
+        item.value = value as? NSCopying & NSObjectProtocol
+        return item
+    }
+
+    private func exportTaggedM4A(from source: URL, to destination: URL) async throws {
+        let asset = AVURLAsset(url: source)
+        let session = try XCTUnwrap(
+            AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A)
+        )
+        session.outputURL = destination
+        session.outputFileType = .m4a
+        session.metadata = [
+            metadataItem(.iTunesMetadataAlbumArtist, value: "专辑歌手" as NSString),
+            metadataItem(.iTunesMetadataTrackNumber, value: NSNumber(value: 7)),
+            metadataItem(.iTunesMetadataReleaseDate, value: "2020-05-01T00:00:00Z" as NSString),
+            metadataItem(.iTunesMetadataUserGenre, value: "流行" as NSString),
+        ]
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            session.exportAsynchronously {
+                if let error = session.error {
+                    continuation.resume(throwing: error)
+                } else if session.status != .completed {
+                    let error = NSError(
+                        domain: "LibraryScannerTests",
+                        code: Int(session.status.rawValue),
+                        userInfo: [NSLocalizedDescriptionKey: "export status \(session.status.rawValue)"]
+                    )
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    func testReadsStandardTagsFromM4A() async throws {
+        let source = try makeSilentWAV(named: "标签源.wav")
+        let m4a = tempDir.appendingPathComponent("标签测试.m4a")
+        try await exportTaggedM4A(from: source, to: m4a)
+
+        let read = await AVFoundationMetadataReader().read(url: m4a)
+        let metadata = try XCTUnwrap(read)
+
+        XCTAssertEqual(metadata.albumArtist, "专辑歌手")
+        XCTAssertEqual(metadata.trackNumber, 7)
+        XCTAssertEqual(metadata.year, 2020)
+        XCTAssertEqual(metadata.genre, "流行")
+    }
+
+    func testWhitespaceOnlyStemYieldsNoWhitespaceTitle() {
+        let url = tempDir.appendingPathComponent("   .mp3")
+
+        let track = TrackFactory.make(url: url, metadata: nil)
+
+        XCTAssertEqual(track.title, "")
+    }
+
     func testScanFindsPlayableFileAndReportsCorruptOne() async throws {
         _ = try makeSilentWAV(named: "测试曲目.wav")
 

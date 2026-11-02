@@ -16,11 +16,14 @@ public enum LibraryScanner {
         "ape", "wma", "ogg", "oga", "opus", "wv", "tta", "dsf", "dff",
     ]
 
-    /// Formats AVFoundation can read directly. Everything else in
-    /// `supportedExtensions` is indexed from the filename and transcoded later.
-    private static let nativeExtensions: Set<String> = [
-        "mp3", "m4a", "m4r", "aac", "wav", "aiff", "aif", "flac", "mp4", "alac",
+    /// Formats AVFoundation can read directly. Derived by subtraction so it can
+    /// never list an extension outside `supportedExtensions`.
+    private static let nonNativeExtensions: Set<String> = [
+        "ape", "wma", "ogg", "oga", "opus", "wv", "tta", "dsf", "dff",
     ]
+
+    private static let nativeExtensions: Set<String> =
+        supportedExtensions.subtracting(nonNativeExtensions)
 
     public static func scan(
         folders: [URL],

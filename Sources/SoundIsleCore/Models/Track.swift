@@ -55,6 +55,7 @@ public enum TrackFactory {
     public static func make(url: URL, metadata: AudioMetadata?, id: UUID = UUID()) -> Track {
         let parsed = FilenameParser.parse(filename: url.lastPathComponent)
         let stem = (url.lastPathComponent as NSString).deletingPathExtension
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
 
         func clean(_ value: String?) -> String? {
@@ -63,7 +64,7 @@ public enum TrackFactory {
             return trimmed
         }
 
-        let title = clean(metadata?.title) ?? (parsed.title.isEmpty ? stem : parsed.title)
+        let title = clean(metadata?.title) ?? clean(parsed.title) ?? stem
 
         return Track(
             id: id,

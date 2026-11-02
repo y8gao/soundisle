@@ -63,7 +63,6 @@ public struct AVFoundationMetadataReader: MetadataReading {
                 continue
             }
 
-            let identifier = item.identifier?.rawValue.lowercased() ?? ""
             switch item.commonKey?.rawValue {
             case AVMetadataKey.commonKeyTitle.rawValue:
                 if metadata.title == nil { metadata.title = await text(of: item) }
@@ -71,21 +70,30 @@ public struct AVFoundationMetadataReader: MetadataReading {
                 if metadata.artist == nil { metadata.artist = await text(of: item) }
             case AVMetadataKey.commonKeyAlbumName.rawValue:
                 if metadata.album == nil { metadata.album = await text(of: item) }
-            case AVMetadataKey.commonKeyType.rawValue:
-                if metadata.genre == nil { metadata.genre = await text(of: item) }
             case AVMetadataKey.commonKeyCreationDate.rawValue:
-                if metadata.year == nil {
-                    metadata.year = await text(of: item).flatMap(Self.year(from:))
-                }
+                if metadata.year == nil { metadata.year = await year(of: item) }
             default:
-                if metadata.albumArtist == nil, identifier.contains("albumartist") || identifier.contains("tpe2") {
-                    metadata.albumArtist = await text(of: item)
-                } else if metadata.trackNumber == nil, identifier.contains("tracknumber") || identifier.contains("trck") {
-                    metadata.trackNumber = await text(of: item).flatMap(Self.leadingInt(from:))
-                } else if metadata.year == nil, identifier.contains("year") || identifier.contains("releasedate") || identifier.contains("tyer") || identifier.contains("tdrc") {
-                    metadata.year = await text(of: item).flatMap(Self.year(from:))
-                } else if metadata.genre == nil, identifier.contains("genre") {
-                    metadata.genre = await text(of: item)
+                switch item.identifier?.rawValue {
+                case AVMetadataIdentifier.iTunesMetadataAlbumArtist.rawValue,
+                     AVMetadataIdentifier.id3MetadataBand.rawValue:
+                    if metadata.albumArtist == nil { metadata.albumArtist = await text(of: item) }
+                case AVMetadataIdentifier.iTunesMetadataTrackNumber.rawValue,
+                     AVMetadataIdentifier.id3MetadataTrackNumber.rawValue:
+                    if metadata.trackNumber == nil {
+                        metadata.trackNumber = await text(of: item).flatMap(Self.leadingInt(from:))
+                    }
+                case AVMetadataIdentifier.iTunesMetadataReleaseDate.rawValue,
+                     AVMetadataIdentifier.id3MetadataYear.rawValue,
+                     AVMetadataIdentifier.id3MetadataRecordingTime.rawValue,
+                     AVMetadataIdentifier.quickTimeMetadataYear.rawValue:
+                    if metadata.year == nil { metadata.year = await year(of: item) }
+                case AVMetadataIdentifier.iTunesMetadataUserGenre.rawValue,
+                     AVMetadataIdentifier.iTunesMetadataPredefinedGenre.rawValue,
+                     AVMetadataIdentifier.id3MetadataContentType.rawValue,
+                     AVMetadataIdentifier.quickTimeMetadataGenre.rawValue:
+                    if metadata.genre == nil { metadata.genre = await text(of: item) }
+                default:
+                    break
                 }
             }
         }
@@ -102,6 +110,14 @@ public struct AVFoundationMetadataReader: MetadataReading {
             return number.stringValue
         }
         return nil
+    }
+
+    private func year(of item: AVMetadataItem) async -> Int? {
+        if let date = try? await item.load(.dateValue),
+           let year = Calendar(identifier: .gregorian).dateComponents([.year], from: date).year {
+            return year
+        }
+        return await text(of: item).flatMap(Self.year(from:))
     }
 
     private static func leadingInt(from string: String) -> Int? {
