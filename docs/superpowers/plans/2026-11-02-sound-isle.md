@@ -114,7 +114,7 @@ git commit -m "feat: add app scaffold and bundle script"
 
 **Interfaces:**
 - Produces:
-  - `struct Track: Identifiable, Codable, Hashable`，字段：`id: UUID`、`url: URL`、`title: String`、`artist: String`、`album: String`、`albumArtist: String?`、`year: Int?`、`trackNumber: Int?`、`genre: String?`、`duration: TimeInterval`、`fileSize: Int64`、`modifiedAt: Date`、`artworkFileName: String?`、`lyricsOverrideFileName: String?`、`isMissing: Bool`（默认 `false`）。
+  - `struct Track: Identifiable, Codable, Hashable`，字段：`id: UUID`、`url: URL`、`title: String`、`artist: String`、`album: String`、`albumArtist: String?`、`year: Int?`、`trackNumber: Int?`、`genre: String?`、`duration: TimeInterval`、`fileSize: Int64`、`modifiedAt: Date`、`artworkFileName: String?`、`isMissing: Bool`（默认 `false`）。
   - `struct Playlist: Identifiable, Codable, Hashable`，字段：`id: UUID`、`name: String`、`trackIDs: [UUID]`。
   - `struct ParsedFilename: Equatable`：`title: String`、`artist: String?`、`trackNumber: Int?`。
   - `enum FilenameParser { static func parse(filename: String) -> ParsedFilename }`。
