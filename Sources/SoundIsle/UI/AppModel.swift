@@ -45,6 +45,12 @@ final class AppModel: ObservableObject {
     /// drives these through the hooks below.
     @Published private(set) var isLyricsVisible = false
     @Published private(set) var isLyricsLocked = false
+    /// Parsed lyrics for the current track; nil means "暂无歌词".
+    @Published private(set) var lyrics: Lyrics?
+    @Published private(set) var currentLyricLineIndex: Int?
+    /// The overlay controller is created by `AppDelegate`; the menu bar and
+    /// main window both go through the hooks below.
+    weak var lyricsOverlay: LyricsOverlayWindowController?
     @Published var searchFocusRequest = UUID()
     @Published var endSearchFocusRequest = UUID()
     /// Mirrors the SwiftUI focus state of the search field so the local key
@@ -76,8 +82,10 @@ final class AppModel: ObservableObject {
         }
 
         restorePlaybackState()
+        isLyricsLocked = library.settings.lyricsLocked
         engine.setVolume(Float(volume))
         observeEngine()
+        loadLyrics(for: currentTrack)
         installKeyMonitor()
     }
 
@@ -528,7 +536,7 @@ final class AppModel: ObservableObject {
         savePlaybackState()
     }
 
-    // MARK: - Lyrics (Task 8 fills the overlay, the menu already calls these)
+    // MARK: - Lyrics
 
     func toggleLyricsVisibility() {
         setLyricsVisible(!isLyricsVisible)
@@ -537,8 +545,7 @@ final class AppModel: ObservableObject {
     func setLyricsVisible(_ visible: Bool) {
         guard isLyricsVisible != visible else { return }
         isLyricsVisible = visible
-        // ponytail: Task 8 replaces this placeholder with the real overlay.
-        statusMessage = "歌词功能将在后续版本提供。"
+        lyricsOverlay?.setVisible(visible)
     }
 
     func toggleLyricsLock() {
@@ -548,8 +555,77 @@ final class AppModel: ObservableObject {
     func setLyricsLocked(_ locked: Bool) {
         guard isLyricsLocked != locked else { return }
         isLyricsLocked = locked
-        // ponytail: Task 8 replaces this placeholder with the real overlay.
-        statusMessage = "歌词功能将在后续版本提供。"
+        library.settings.lyricsLocked = locked
+        library.saveSettings()
+        lyricsOverlay?.setLocked(locked)
+    }
+
+    func setLyricsOpacity(_ opacity: Double) {
+        let clamped = min(max(opacity, 0.05), 0.9)
+        guard library.settings.lyricsOpacity != clamped else { return }
+        library.settings.lyricsOpacity = clamped
+        library.saveSettings()
+        objectWillChange.send()
+    }
+
+    func setLyricsOutline(_ outline: Bool) {
+        guard library.settings.lyricsOutline != outline else { return }
+        library.settings.lyricsOutline = outline
+        library.saveSettings()
+        objectWillChange.send()
+    }
+
+    func setLyricsLineMode(_ mode: String) {
+        guard mode == "one" || mode == "two", library.settings.lyricsLineMode != mode else { return }
+        library.settings.lyricsLineMode = mode
+        library.saveSettings()
+        objectWillChange.send()
+    }
+
+    /// Current synced line, or the first line before playback reaches it.
+    var currentLyricText: String? {
+        guard let lyrics, !lyrics.lines.isEmpty else { return nil }
+        guard lyrics.isSynced else { return lyrics.lines.first?.text }
+        let index = currentLyricLineIndex ?? 0
+        guard lyrics.lines.indices.contains(index) else { return nil }
+        return lyrics.lines[index].text
+    }
+
+    var nextLyricText: String? {
+        guard let lyrics, lyrics.isSynced, !lyrics.lines.isEmpty else { return nil }
+        let index = (currentLyricLineIndex ?? 0) + 1
+        guard lyrics.lines.indices.contains(index) else { return nil }
+        return lyrics.lines[index].text
+    }
+
+    private func loadLyrics(for track: Track?) {
+        guard let track, !track.isMissing,
+              let url = LyricsSidecar.find(for: track),
+              let text = Self.readText(at: url) else {
+            lyrics = nil
+            currentLyricLineIndex = nil
+            return
+        }
+        let parsed = LRCParser.parse(text)
+        lyrics = parsed.lines.isEmpty ? nil : parsed
+        currentLyricLineIndex = nil
+        updateCurrentLyricLine(at: engine.position)
+    }
+
+    /// LRC files are small, but they are not always UTF-8; fall back to the
+    /// BOM/detected encoding before giving up.
+    private static func readText(at url: URL) -> String? {
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            return text
+        }
+        var encoding: String.Encoding = .utf8
+        return try? String(contentsOf: url, usedEncoding: &encoding)
+    }
+
+    private func updateCurrentLyricLine(at time: TimeInterval) {
+        let index = lyrics?.index(at: time)
+        guard currentLyricLineIndex != index else { return }
+        currentLyricLineIndex = index
     }
 
     // MARK: - Persistence
@@ -615,6 +691,23 @@ final class AppModel: ObservableObject {
                 self?.next()
             }
         }
+
+        $currentTrack
+            .sink { [weak self] track in
+                Task { @MainActor [weak self] in
+                    self?.loadLyrics(for: track)
+                }
+            }
+            .store(in: &cancellables)
+
+        // The engine publishes at ~2 Hz, which is ample for per-line changes.
+        engine.$position
+            .sink { [weak self] position in
+                Task { @MainActor [weak self] in
+                    self?.updateCurrentLyricLine(at: position)
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private func startSaveTimer() {

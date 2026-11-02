@@ -149,6 +149,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(settings.lyricsOpacity, 0.26)
         XCTAssertFalse(settings.lyricsOutline)
         XCTAssertEqual(settings.lyricsLineMode, "two")
+        XCTAssertFalse(settings.lyricsLocked)
         XCTAssertEqual(settings.rowStyle, "index")
         XCTAssertFalse(settings.showMainSpectrum)
         XCTAssertTrue(settings.hideFromScreenCapture)

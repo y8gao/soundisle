@@ -7,6 +7,7 @@ public struct AppSettings: Codable, Equatable {
     public var lyricsOpacity: Double = 0.26
     public var lyricsOutline: Bool = false
     public var lyricsLineMode: String = "two"
+    public var lyricsLocked: Bool = false
     public var rowStyle: String = "index"
     public var showMainSpectrum: Bool = false
     public var hideFromScreenCapture: Bool = true
@@ -31,6 +32,7 @@ public struct AppSettings: Codable, Equatable {
         lyricsOpacity = try container.decodeIfPresent(Double.self, forKey: .lyricsOpacity) ?? 0.26
         lyricsOutline = try container.decodeIfPresent(Bool.self, forKey: .lyricsOutline) ?? false
         lyricsLineMode = try container.decodeIfPresent(String.self, forKey: .lyricsLineMode) ?? "two"
+        lyricsLocked = try container.decodeIfPresent(Bool.self, forKey: .lyricsLocked) ?? false
         rowStyle = try container.decodeIfPresent(String.self, forKey: .rowStyle) ?? "index"
         showMainSpectrum = try container.decodeIfPresent(Bool.self, forKey: .showMainSpectrum) ?? false
         hideFromScreenCapture = try container.decodeIfPresent(Bool.self, forKey: .hideFromScreenCapture) ?? true

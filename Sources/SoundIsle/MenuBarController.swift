@@ -52,18 +52,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         addItem(miniPlayer.isVisible ? "隐藏迷你窗" : "显示迷你窗", action: #selector(toggleMiniPlayer))
         menu.addItem(.separator())
 
-        // Task 8 renders the lyric overlay. The actions already call the
-        // AppModel hooks, so only the disabled state changes then.
-        let showLyrics = addItem(
-            model.isLyricsVisible ? "隐藏歌词（即将提供）" : "显示歌词（即将提供）",
-            action: #selector(toggleLyrics)
-        )
-        showLyrics.isEnabled = false
-        let lockLyrics = addItem(
-            model.isLyricsLocked ? "解锁歌词（即将提供）" : "锁定歌词（即将提供）",
-            action: #selector(toggleLyricsLock)
-        )
-        lockLyrics.isEnabled = false
+        addItem(model.isLyricsVisible ? "隐藏歌词" : "显示歌词", action: #selector(toggleLyrics))
+        addItem(model.isLyricsLocked ? "解锁歌词" : "锁定歌词", action: #selector(toggleLyricsLock))
         menu.addItem(.separator())
 
         addItem("显示主窗口", action: #selector(showMainWindowItem))

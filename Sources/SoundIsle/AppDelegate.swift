@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var mediaKeys: MediaKeyController?
     private var miniPlayer: MiniPlayerWindowController?
+    private var lyricsOverlay: LyricsOverlayWindowController?
     /// The SwiftUI window survives "closing" because `WindowConfigurator`
     /// hides it when `keepRunningOnClose` is on, so this stays valid.
     private weak var mainWindow: NSWindow?
@@ -20,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let miniPlayer = MiniPlayerWindowController(model: model)
         miniPlayer.onExpand = { [weak self] in self?.showMainWindow() }
         self.miniPlayer = miniPlayer
+
+        let lyricsOverlay = LyricsOverlayWindowController(model: model)
+        lyricsOverlay.setLocked(model.isLyricsLocked)
+        model.lyricsOverlay = lyricsOverlay
+        self.lyricsOverlay = lyricsOverlay
 
         menuBar = MenuBarController(model: model, miniPlayer: miniPlayer) { [weak self] in
             self?.showMainWindow()

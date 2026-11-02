@@ -34,6 +34,9 @@ enum Icons {
     // Player bar
     static func volume(size: CGFloat = 18) -> Image { symbol("speaker.wave.2", size: size) }
     static func lyrics(size: CGFloat = 18) -> Image { symbol("text.alignleft", size: size) }
+    static func lyricsLock(locked: Bool, size: CGFloat = 13) -> Image {
+        symbol(locked ? "lock.fill" : "lock.open", size: size)
+    }
     static var coverNote: Image { symbol("music.note", size: 17) }
 
     // Sidebar

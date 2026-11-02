@@ -164,9 +164,14 @@ struct PlayerBarView: View {
                 .frame(width: 46, height: 14)
 
             PlayerIconButton(icon: Icons.lyrics(), size: 30) {
-                model.statusMessage = "歌词功能将在后续版本提供。"
+                model.toggleLyricsVisibility()
             }
-            .help("歌词")
+            .help(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
+
+            PlayerIconButton(icon: Icons.lyricsLock(locked: model.isLyricsLocked, size: 12), size: 26) {
+                model.toggleLyricsLock()
+            }
+            .help(model.isLyricsLocked ? "解锁歌词" : "锁定歌词")
         }
         .opacity(0.8)
     }
