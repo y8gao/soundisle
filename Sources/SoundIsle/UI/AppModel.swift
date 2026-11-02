@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import SoundIsleCore
+import UniformTypeIdentifiers
 
 /// What the sidebar has selected. One value instead of a pile of booleans so
 /// the list, the title and playback all agree on the current source.
@@ -47,6 +48,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var isLyricsLocked = false
     /// Parsed lyrics for the current track; nil means "暂无歌词".
     @Published private(set) var lyrics: Lyrics?
+    /// Where `lyrics` came from, so the UI can offer the right actions.
+    @Published private(set) var lyricsOrigin: LyricsOrigin = .none
+    @Published private(set) var isResolvingLyrics = false
     @Published private(set) var currentLyricLineIndex: Int?
     /// The overlay controller is created by `AppDelegate`; the menu bar and
     /// main window both go through the hooks below.
@@ -64,6 +68,11 @@ final class AppModel: ObservableObject {
     private var saveTimer: Timer?
     private var keyMonitor: Any?
     private var didStart = false
+    /// Lyrics resolution is fully async; switching tracks cancels the previous
+    /// lookup and ignores its late result.
+    private let lyricsCache: LyricsCache
+    private let lyricsService: LyricsService
+    private var lyricsTask: Task<Void, Never>?
 
     // MARK: - Lifecycle
 
@@ -80,6 +89,11 @@ final class AppModel: ObservableObject {
             library.playlists = playlists
             library.savePlaylists()
         }
+        let lyricsCache = LyricsCache(
+            directory: directory.appendingPathComponent("lyrics", isDirectory: true)
+        )
+        self.lyricsCache = lyricsCache
+        self.lyricsService = LyricsService(cache: lyricsCache, client: LRCLIBClient())
 
         restorePlaybackState()
         isLyricsLocked = library.settings.lyricsLocked
@@ -90,6 +104,7 @@ final class AppModel: ObservableObject {
     }
 
     deinit {
+        lyricsTask?.cancel()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         saveTimer?.invalidate()
     }
@@ -598,28 +613,124 @@ final class AppModel: ObservableObject {
         return lyrics.lines[index].text
     }
 
-    private func loadLyrics(for track: Track?) {
-        guard let track, !track.isMissing,
-              let url = LyricsSidecar.find(for: track),
-              let text = Self.readText(at: url) else {
-            lyrics = nil
-            currentLyricLineIndex = nil
+    var hasLyricsOverride: Bool {
+        lyricsOrigin == .override
+    }
+
+    /// A silent online miss leaves `lyrics == nil`; the overlay and menus then
+    /// offer this retry entry.
+    var canRetryLyrics: Bool {
+        currentTrack != nil && lyrics == nil && !isResolvingLyrics
+    }
+
+    /// 「更换歌词…」: import `.lrc` or plain `.txt`, store it as the track's
+    /// manual override and show it immediately.
+    func promptImportLyrics() {
+        guard let track = currentTrack else {
+            statusMessage = "先播放一首歌曲，再导入歌词。"
             return
         }
-        let parsed = LRCParser.parse(text)
-        lyrics = parsed.lines.isEmpty ? nil : parsed
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "导入"
+        panel.message = "选择 .lrc 或 .txt 歌词文件"
+        var types: [UTType] = [.plainText]
+        if let lrc = UTType(filenameExtension: "lrc") {
+            types.insert(lrc, at: 0)
+        }
+        panel.allowedContentTypes = types
+        let response = panel.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .OK, let url = panel.url else { return }
+        guard let text = LyricsService.readText(at: url) else {
+            statusMessage = "无法读取歌词文件。"
+            return
+        }
+
+        let parsed = Self.parseImportedLyrics(
+            text,
+            forcePlain: url.pathExtension.lowercased() != "lrc"
+        )
+        guard !parsed.lines.isEmpty else {
+            statusMessage = "歌词文件没有可用内容。"
+            return
+        }
+
+        do {
+            try lyricsCache.saveOverride(parsed, for: track.id)
+        } catch {
+            statusMessage = "无法保存歌词：\(error.localizedDescription)"
+            return
+        }
+        // The open panel is modal, but a media key can still change tracks.
+        guard currentTrack?.id == track.id else {
+            loadLyrics(for: currentTrack)
+            return
+        }
+        lyricsTask?.cancel()
+        isResolvingLyrics = false
+        apply(ResolvedLyrics(lyrics: parsed, origin: .override, sourceURL: url))
+        statusMessage = "已导入歌词"
+    }
+
+    /// 「恢复自动匹配」: drop the override and resolve the normal priority
+    /// chain again (sidecar, cache, then online).
+    func restoreAutomaticLyrics() {
+        guard let track = currentTrack else { return }
+        try? lyricsCache.removeOverride(for: track.id)
+        loadLyrics(for: track)
+        statusMessage = "已恢复自动匹配"
+    }
+
+    /// User-initiated retry after a silent online miss.
+    func retryLyrics() {
+        guard let track = currentTrack else { return }
+        loadLyrics(for: track)
+    }
+
+    /// Loads lyrics off the main actor. A previous track's lookup is cancelled
+    /// so a slow network response can never overwrite the current track's
+    /// lyrics.
+    private func loadLyrics(for track: Track?) {
+        lyricsTask?.cancel()
+        lyricsTask = nil
+        guard let track, !track.isMissing else {
+            isResolvingLyrics = false
+            apply(nil)
+            return
+        }
+
+        lyricsService.isOnlineEnabled = library.settings.onlineLyricsEnabled
+        isResolvingLyrics = true
+        lyricsTask = Task { [weak self] in
+            guard let self else { return }
+            let resolved = await self.lyricsService.resolve(for: track)
+            guard !Task.isCancelled else { return }
+            self.isResolvingLyrics = false
+            guard self.currentTrack?.id == track.id else { return }
+            self.apply(resolved)
+        }
+    }
+
+    private func apply(_ resolved: ResolvedLyrics?) {
+        lyrics = resolved?.lyrics
+        lyricsOrigin = resolved?.origin ?? .none
         currentLyricLineIndex = nil
         updateCurrentLyricLine(at: engine.position)
     }
 
-    /// LRC files are small, but they are not always UTF-8; fall back to the
-    /// BOM/detected encoding before giving up.
-    private static func readText(at url: URL) -> String? {
-        if let text = try? String(contentsOf: url, encoding: .utf8) {
-            return text
-        }
-        var encoding: String.Encoding = .utf8
-        return try? String(contentsOf: url, usedEncoding: &encoding)
+    /// `.lrc` keeps its timestamps; plain text is shown line-by-line even if
+    /// the file happens to contain bracket-looking text.
+    private static func parseImportedLyrics(_ text: String, forcePlain: Bool) -> Lyrics {
+        let parsed = LRCParser.parse(text)
+        guard forcePlain else { return parsed }
+        return Lyrics(
+            lines: parsed.lines.map { LyricLine(time: 0, text: $0.text) },
+            isSynced: false
+        )
     }
 
     private func updateCurrentLyricLine(at time: TimeInterval) {

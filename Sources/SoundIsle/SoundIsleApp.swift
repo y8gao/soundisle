@@ -23,6 +23,17 @@ struct SoundIsleApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandMenu("歌词") {
+                Button("更换歌词…") {
+                    appDelegate.model.promptImportLyrics()
+                }
+                Button("恢复自动匹配") {
+                    appDelegate.model.restoreAutomaticLyrics()
+                }
+                Button("重试匹配") {
+                    appDelegate.model.retryLyrics()
+                }
+            }
         }
     }
 }

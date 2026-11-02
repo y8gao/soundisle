@@ -39,7 +39,6 @@ struct LyricsOverlayView: View {
                 content(fontSize: fontSize)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 14)
-                    .allowsHitTesting(false)
 
                 if !model.isLyricsLocked {
                     controls
@@ -49,6 +48,7 @@ struct LyricsOverlayView: View {
             .clipShape(shape)
             .overlay(shape.strokeBorder(Color.white.opacity(0.17), lineWidth: 1))
             .contentShape(shape)
+            .contextMenu { lyricsMenu }
             .onHover { isHovering = $0 }
         }
         .preferredColorScheme(.dark)
@@ -84,6 +84,7 @@ struct LyricsOverlayView: View {
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .allowsHitTesting(false)
             } else {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: fontSize * 0.25) {
@@ -99,21 +100,52 @@ struct LyricsOverlayView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                 }
+                .allowsHitTesting(false)
             }
         } else {
             VStack(spacing: 7) {
-                Text("暂无歌词")
+                Text(model.isResolvingLyrics ? "正在匹配歌词…" : "暂无歌词")
                     .font(.system(size: max(13, fontSize * 0.6), weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
-                Button("导入歌词…") {}
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.4))
-                    .disabled(true)
-                    .help("后续版本支持")
+                HStack(spacing: 10) {
+                    Button("导入歌词…") {
+                        model.promptImportLyrics()
+                    }
+                    .disabled(model.currentTrack == nil)
+                    .help("选择 .lrc 或 .txt 文件")
+
+                    Button("重试匹配") {
+                        model.retryLyrics()
+                    }
+                    .disabled(model.currentTrack == nil || model.isResolvingLyrics)
+                    .help("重新查找同名歌词或在线匹配")
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.6))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    /// Right-click menu for the lyrics window. The same entries also live in
+    /// the app menu and the menu bar.
+    @ViewBuilder
+    private var lyricsMenu: some View {
+        Button("更换歌词…") {
+            model.promptImportLyrics()
+        }
+        .disabled(model.currentTrack == nil)
+
+        Button("恢复自动匹配") {
+            model.restoreAutomaticLyrics()
+        }
+        .disabled(!model.hasLyricsOverride)
+
+        Button("重试匹配") {
+            model.retryLyrics()
+        }
+        .disabled(model.currentTrack == nil || model.isResolvingLyrics)
     }
 
     /// Text has no native stroke on macOS 12, so draw a few offset copies

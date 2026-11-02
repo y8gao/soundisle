@@ -54,6 +54,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         addItem(model.isLyricsVisible ? "隐藏歌词" : "显示歌词", action: #selector(toggleLyrics))
         addItem(model.isLyricsLocked ? "解锁歌词" : "锁定歌词", action: #selector(toggleLyricsLock))
+        let importItem = addItem("更换歌词…", action: #selector(importLyrics))
+        importItem.isEnabled = model.currentTrack != nil
+        let restoreItem = addItem("恢复自动匹配", action: #selector(restoreAutomaticLyrics))
+        restoreItem.isEnabled = model.hasLyricsOverride
+        if model.canRetryLyrics {
+            addItem("重试匹配", action: #selector(retryLyrics))
+        }
         menu.addItem(.separator())
 
         addItem("显示主窗口", action: #selector(showMainWindowItem))
@@ -102,6 +109,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func toggleLyricsLock() {
         model.toggleLyricsLock()
+    }
+
+    @objc private func importLyrics() {
+        model.promptImportLyrics()
+    }
+
+    @objc private func restoreAutomaticLyrics() {
+        model.restoreAutomaticLyrics()
+    }
+
+    @objc private func retryLyrics() {
+        model.retryLyrics()
     }
 
     @objc private func showMainWindowItem() {
