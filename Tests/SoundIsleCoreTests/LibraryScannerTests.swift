@@ -20,7 +20,10 @@ final class LibraryScannerTests: XCTestCase {
     }
 
     private func makeSilentWAV(named name: String, seconds: Double = 1) throws -> URL {
-        let url = tempDir.appendingPathComponent(name)
+        try makeSilentWAV(at: tempDir.appendingPathComponent(name), seconds: seconds)
+    }
+
+    private func makeSilentWAV(at url: URL, seconds: Double = 1) throws -> URL {
         let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1))
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
         let frames = AVAudioFrameCount(format.sampleRate * seconds)
@@ -46,6 +49,30 @@ final class LibraryScannerTests: XCTestCase {
             result.unreadable.map { $0.resolvingSymlinksInPath() },
             [corrupt.resolvingSymlinksInPath()]
         )
+    }
+
+    func testNonNativeFormatIsIndexedWithoutMetadata() async throws {
+        let ape = tempDir.appendingPathComponent("无损采样.ape")
+        try Data("not really an ape file".utf8).write(to: ape)
+
+        let result = await LibraryScanner.scan(folders: [tempDir])
+
+        XCTAssertEqual(result.tracks.count, 1)
+        XCTAssertEqual(result.tracks.first?.title, "无损采样")
+        XCTAssertEqual(result.tracks.first?.duration, 0)
+        XCTAssertTrue(result.unreadable.isEmpty)
+    }
+
+    func testOverlappingScanRootsReturnEachFileOnce() async throws {
+        _ = try makeSilentWAV(named: "外层.wav")
+        let sub = tempDir.appendingPathComponent("子目录", isDirectory: true)
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        _ = try makeSilentWAV(at: sub.appendingPathComponent("内层.wav"))
+
+        let result = await LibraryScanner.scan(folders: [tempDir, sub])
+
+        XCTAssertEqual(result.tracks.count, 2)
+        XCTAssertEqual(Set(result.tracks.map(\.title)), ["外层", "内层"])
     }
 
     func testMergePrefersMetadata() {

@@ -12,8 +12,14 @@ public struct ScanResult {
 
 public enum LibraryScanner {
     public static let supportedExtensions: Set<String> = [
-        "mp3", "m4a", "m4r", "aac", "wav", "aiff", "flac", "alac", "mp4",
+        "mp3", "m4a", "m4r", "aac", "wav", "aiff", "aif", "flac", "alac", "mp4",
         "ape", "wma", "ogg", "oga", "opus", "wv", "tta", "dsf", "dff",
+    ]
+
+    /// Formats AVFoundation can read directly. Everything else in
+    /// `supportedExtensions` is indexed from the filename and transcoded later.
+    private static let nativeExtensions: Set<String> = [
+        "mp3", "m4a", "m4r", "aac", "wav", "aiff", "aif", "flac", "mp4", "alac",
     ]
 
     public static func scan(
@@ -24,7 +30,8 @@ public enum LibraryScanner {
 
         var byIndex: [Int: AudioMetadata] = [:]
         await withTaskGroup(of: (Int, AudioMetadata?).self) { group in
-            for (index, url) in urls.enumerated() {
+            for (index, url) in urls.enumerated()
+            where nativeExtensions.contains(url.pathExtension.lowercased()) {
                 group.addTask {
                     (index, await reader.read(url: url))
                 }
@@ -37,10 +44,14 @@ public enum LibraryScanner {
         var tracks: [Track] = []
         var unreadable: [URL] = []
         for (index, url) in urls.enumerated() {
-            if let metadata = byIndex[index] {
-                tracks.append(TrackFactory.make(url: url, metadata: metadata))
+            if nativeExtensions.contains(url.pathExtension.lowercased()) {
+                if let metadata = byIndex[index] {
+                    tracks.append(TrackFactory.make(url: url, metadata: metadata))
+                } else {
+                    unreadable.append(url)
+                }
             } else {
-                unreadable.append(url)
+                tracks.append(TrackFactory.make(url: url, metadata: nil))
             }
         }
         return ScanResult(tracks: tracks, unreadable: unreadable)
@@ -49,6 +60,7 @@ public enum LibraryScanner {
     private static func collectFiles(in folders: [URL]) -> [URL] {
         let manager = FileManager.default
         var urls: [URL] = []
+        var seen = Set<URL>()
         for folder in folders {
             guard let enumerator = manager.enumerator(
                 at: folder,
@@ -62,7 +74,9 @@ public enum LibraryScanner {
                    values.isRegularFile == false {
                     continue
                 }
-                urls.append(url)
+                let standardized = url.standardizedFileURL
+                guard seen.insert(standardized).inserted else { continue }
+                urls.append(standardized)
             }
         }
         return urls
