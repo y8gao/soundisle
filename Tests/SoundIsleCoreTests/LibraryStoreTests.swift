@@ -84,6 +84,7 @@ final class LibraryStoreTests: XCTestCase {
         }
     }
 
+    @MainActor
     private func track(named title: String, in store: LibraryStore) throws -> Track {
         try XCTUnwrap(store.index.tracks.first { $0.title == title })
     }
@@ -127,9 +128,21 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(IndexStore(directory: dataDir).loadSettings(), settings)
     }
 
+    @MainActor
+    func testLibraryStoreSavesSettingsThroughItsOwnStore() async throws {
+        let store = LibraryStore(directory: dataDir)
+        store.settings.lastTrackID = UUID()
+        store.settings.lastPosition = 12.5
+
+        store.saveSettings()
+
+        let reloaded = IndexStore(directory: dataDir).loadSettings()
+        XCTAssertEqual(reloaded.lastTrackID, store.settings.lastTrackID)
+        XCTAssertEqual(reloaded.lastPosition, 12.5)
+    }
+
     func testDefaultsMatchPlan() {
         let settings = AppSettings()
-
         XCTAssertEqual(settings.themePreset, "deepBlue")
         XCTAssertEqual(settings.themeMode, "system")
         XCTAssertNil(settings.customAccentHex)
@@ -237,6 +250,7 @@ final class LibraryStoreTests: XCTestCase {
 
     // MARK: - Incremental rescan
 
+    @MainActor
     func testAddFolderScansAndPersists() async throws {
         try makeFile("第一首.mp3")
         let reader = StubReader()
@@ -255,6 +269,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(persistedIndex().tracks.map(\.id), [track.id])
     }
 
+    @MainActor
     func testAddSameFolderTwiceDoesNotDuplicate() async throws {
         try makeFile("重复.mp3")
         let reader = StubReader()
@@ -268,6 +283,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(store.index.tracks.count, 1)
     }
 
+    @MainActor
     func testRescanAddsNewTracksAndKeepsExistingIDs() async throws {
         let firstURL = try makeFile("第一首.mp3")
         let reader = StubReader()
@@ -294,6 +310,7 @@ final class LibraryStoreTests: XCTestCase {
                        firstURL.standardizedFileURL)
     }
 
+    @MainActor
     func testRescanUpdatesChangedTrackButKeepsID() async throws {
         let url = try makeFile("变化.mp3")
         let reader = StubReader()
@@ -315,6 +332,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(persistedIndex().tracks.first?.title, "新标题")
     }
 
+    @MainActor
     func testRescanKeepsExistingTrackWhenFileIsUnchanged() async throws {
         try makeFile("不变.mp3")
         let reader = StubReader()
@@ -332,6 +350,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertFalse(unchanged.isMissing)
     }
 
+    @MainActor
     func testRescanMarksMissingTracksAndKeepsPlaylist() async throws {
         let keepURL = try makeFile("保留.mp3")
         let goneURL = try makeFile("消失.mp3")
@@ -364,6 +383,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(IndexStore(directory: dataDir).loadPlaylists(), [playlist])
     }
 
+    @MainActor
     func testRescanDoesNotMarkUnreadableFilesAsMissing() async throws {
         let url = try makeFile("坏文件.mp3")
         let reader = StubReader()
@@ -380,6 +400,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertTrue(store.missingTracks.isEmpty)
     }
 
+    @MainActor
     func testRemoveMissingTracksPrunesPlaylists() async throws {
         try makeFile("留下.mp3")
         let goneURL = try makeFile("移除.mp3")
@@ -404,6 +425,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(IndexStore(directory: dataDir).loadPlaylists().first?.trackIDs, [keepID])
     }
 
+    @MainActor
     func testRescanWritesArtworkForNewAndChangedTracks() async throws {
         let url = try makeFile("封面.mp3")
         let reader = StubReader()
@@ -430,6 +452,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: coverURL), Data([0xCC]))
     }
 
+    @MainActor
     func testRemoveFolderRemovesItsTracksAndPlaylistEntries() async throws {
         let firstFolder = try makeSubfolder("甲")
         let secondFolder = try makeSubfolder("乙")
@@ -455,6 +478,7 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(persistedIndex().tracks.map(\.id), [secondID])
     }
 
+    @MainActor
     func testUpdateTrackPersistsEdits() async throws {
         try makeFile("编辑.mp3")
         let reader = StubReader()

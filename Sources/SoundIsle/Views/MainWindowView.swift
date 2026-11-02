@@ -96,7 +96,7 @@ struct MainWindowView: View {
                 TrackListView(model: model)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            PlayerBarView(model: model, engine: model.engine)
+            PlayerBarView(model: model)
                 .frame(height: 76)
         }
         .background(AppBackground())

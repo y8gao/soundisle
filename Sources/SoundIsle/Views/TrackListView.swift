@@ -166,6 +166,8 @@ struct TrackListView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(model.isScanning)
+            .opacity(model.isScanning ? 0.45 : 1)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -257,33 +259,22 @@ private struct TrackRow: View {
 
 // MARK: - Playing indicator
 
-/// Three little bars that pulse while audio is playing and sit at rest when
-/// paused. TimelineView is used instead of a permanent animation so the paused
-/// app schedules no redraws.
+/// Three little bars marking the current track. Kept static: an animated
+/// equalizer drove SwiftUI commits continuously and dominated idle playback
+/// CPU on older Macs, while a static glyph already communicates "playing".
 private struct PlayingIndicator: View {
     let isPlaying: Bool
 
+    private let heights: [CGFloat] = [5, 11, 8]
+
     var body: some View {
-        Group {
-            if isPlaying {
-                TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
-                    bars(at: context.date.timeIntervalSinceReferenceDate, animated: true)
-                }
-            } else {
-                bars(at: 0, animated: false)
+        HStack(alignment: .bottom, spacing: 2) {
+            ForEach(0..<3, id: \.self) { bar in
+                Capsule()
+                    .fill(Theme.accent)
+                    .frame(width: 2.5, height: isPlaying ? heights[bar] : 3)
             }
         }
         .frame(width: 14, height: 12, alignment: .bottom)
-    }
-
-    private func bars(at time: TimeInterval, animated: Bool) -> some View {
-        HStack(alignment: .bottom, spacing: 2) {
-            ForEach(0..<3, id: \.self) { bar in
-                let wave = animated ? (sin(time * 5 + Double(bar) * 1.7) + 1) / 2 : 0
-                Capsule()
-                    .fill(Theme.accent)
-                    .frame(width: 2.5, height: 3 + wave * 8)
-            }
-        }
     }
 }

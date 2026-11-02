@@ -70,6 +70,8 @@ struct SidebarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(model.isScanning)
+            .opacity(model.isScanning ? 0.45 : 1)
             .padding(.horizontal, 10)
             .padding(.bottom, 12)
             .help("从磁盘选择音乐文件夹")

@@ -33,7 +33,6 @@ final class AppModel: ObservableObject {
         didSet { engine.setVolume(Float(volume)) }
     }
 
-    private let store: IndexStore
     private var cancellables = Set<AnyCancellable>()
     private var saveTimer: Timer?
     private var keyMonitor: Any?
@@ -44,11 +43,9 @@ final class AppModel: ObservableObject {
     init(directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        let store = IndexStore(directory: directory)
         let library = LibraryStore(directory: directory)
         library.load()
 
-        self.store = store
         self.library = library
         self.engine = PlayerEngine()
 
@@ -141,11 +138,14 @@ final class AppModel: ObservableObject {
         }
         let unique = Array(Set(folders.map(\.standardizedFileURL)))
         guard !unique.isEmpty else { return }
+        guard !isScanning else {
+            statusMessage = "正在扫描音乐库，请稍后再导入。"
+            return
+        }
         Task { await importFoldersAndScan(unique) }
     }
 
     private func importFoldersAndScan(_ urls: [URL]) async {
-        guard !isScanning else { return }
         isScanning = true
         for url in urls {
             await library.addFolder(url)
@@ -207,7 +207,11 @@ final class AppModel: ObservableObject {
                 engine.pause()
             } else if engine.duration > 0 {
                 engine.play()
-                statusMessage = nil
+                if engine.isPlaying {
+                    statusMessage = nil
+                } else {
+                    statusMessage = startFailureStatus
+                }
             } else {
                 resumeCurrent(current)
             }
@@ -221,6 +225,10 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private var startFailureStatus: String {
+        "无法开始播放：\(engine.lastError ?? "未知错误")"
+    }
+
     /// First play after a restore: the engine was deliberately left unloaded
     /// at launch, so load now and jump to the remembered position.
     private func resumeCurrent(_ track: Track) {
@@ -231,15 +239,19 @@ final class AppModel: ObservableObject {
         do {
             try engine.load(url: track.url)
         } catch {
-            statusMessage = "无法播放《\(track.title)》。"
+            statusMessage = "无法播放《\(track.title)》：\(engine.lastError ?? "未知错误")"
             return
         }
         if restoredPosition > 0 {
             engine.seek(to: restoredPosition)
         }
-        restoredPosition = 0
         engine.play()
-        statusMessage = nil
+        if engine.isPlaying {
+            restoredPosition = 0
+            statusMessage = nil
+        } else {
+            statusMessage = startFailureStatus
+        }
     }
 
     func next() {
@@ -270,6 +282,9 @@ final class AppModel: ObservableObject {
         guard let current = currentTrack else { return }
         if engine.duration > 0 {
             engine.seek(to: time)
+            if let error = engine.lastError {
+                statusMessage = "无法跳转播放位置：\(error)"
+            }
         } else {
             let upper = current.duration > 0 ? current.duration : time
             restoredPosition = min(max(time, 0), upper)
@@ -293,13 +308,19 @@ final class AppModel: ObservableObject {
         do {
             try engine.load(url: track.url)
         } catch {
-            statusMessage = "无法播放《\(track.title)》。"
+            statusMessage = "无法播放《\(track.title)》：\(engine.lastError ?? "未知错误")"
             return false
         }
         currentTrack = track
         restoredPosition = 0
         engine.play()
-        statusMessage = nil
+        if engine.isPlaying {
+            statusMessage = nil
+        } else {
+            statusMessage = startFailureStatus
+        }
+        // The file loaded, so keep the queue on this track even if the audio
+        // engine could not start; skipping ahead would hide the failure.
         return true
     }
 
@@ -314,7 +335,7 @@ final class AppModel: ObservableObject {
         settings.lastPosition = max(0, displayPosition)
         settings.playbackMode = queue.mode.rawValue
         library.settings = settings
-        try? store.saveSettings(settings)
+        library.saveSettings()
     }
 
     private func restorePlaybackState() {

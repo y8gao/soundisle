@@ -22,7 +22,6 @@ enum TimeText {
 
 struct PlayerBarView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var engine: PlayerEngine
 
     var body: some View {
         HStack(spacing: 0) {
@@ -95,7 +94,7 @@ struct PlayerBarView: View {
     // MARK: Center
 
     private var centerColumn: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 5) {
             HStack(spacing: 20) {
                 PlayerIconButton(icon: Icons.previous, size: 34) {
                     model.previous()
@@ -109,14 +108,14 @@ struct PlayerBarView: View {
                         Circle()
                             .fill(Theme.text)
                             .shadow(color: .black.opacity(0.28), radius: 6, y: 3)
-                        (engine.isPlaying ? Icons.pause : Icons.play)
+                        (model.isPlaying ? Icons.pause : Icons.play)
                             .foregroundColor(Color(red: 20 / 255, green: 24 / 255, blue: 38 / 255))
                     }
                     .frame(width: 38, height: 38)
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help(engine.isPlaying ? "暂停" : "播放")
+                .help(model.isPlaying ? "暂停" : "播放")
 
                 PlayerIconButton(icon: Icons.next, size: 34) {
                     model.next()
@@ -124,27 +123,9 @@ struct PlayerBarView: View {
                 .help("下一首")
             }
 
-            HStack(spacing: 9) {
-                Text(TimeText.string(model.displayPosition))
-                    .font(.system(size: 10))
-                    .monospacedDigit()
-                    .foregroundColor(Theme.text.opacity(0.72))
-                    .frame(width: 38, alignment: .trailing)
-
-                ProgressSlider(
-                    value: model.displayPosition,
-                    duration: model.displayDuration,
-                    onSeek: { model.seek(to: $0) }
-                )
-                .frame(height: 14)
-
-                Text(TimeText.string(model.displayDuration))
-                    .font(.system(size: 10))
-                    .monospacedDigit()
-                    .foregroundColor(Theme.text.opacity(0.72))
-                    .frame(width: 38, alignment: .leading)
-            }
-            .frame(width: 360)
+            // Isolated so engine-driven position/spectrum updates re-render
+            // only this row, not the whole player bar.
+            PlayerProgressView(model: model, engine: model.engine)
         }
     }
 
@@ -164,6 +145,34 @@ struct PlayerBarView: View {
             .help("歌词")
         }
         .opacity(0.8)
+    }
+}
+
+// MARK: - Progress
+
+private struct PlayerProgressView: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject var engine: PlayerEngine
+
+    var body: some View {
+        VStack(spacing: 2) {
+            ProgressSlider(
+                value: model.displayPosition,
+                duration: model.displayDuration,
+                onSeek: { model.seek(to: $0) }
+            )
+            .frame(width: 360, height: 14)
+
+            HStack(spacing: 0) {
+                Text(TimeText.string(model.displayPosition))
+                Spacer(minLength: 0)
+                Text(TimeText.string(model.displayDuration))
+            }
+            .font(.system(size: 9.5))
+            .monospacedDigit()
+            .foregroundColor(Theme.text.opacity(0.72))
+            .frame(width: 360)
+        }
     }
 }
 

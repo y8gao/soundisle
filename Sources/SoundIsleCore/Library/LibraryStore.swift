@@ -4,6 +4,10 @@ import Foundation
 /// Rescans are incremental: unchanged files keep their `Track` untouched,
 /// changed files keep their `id`, and vanished files stay in the index marked
 /// `isMissing` so playlists never silently lose entries.
+///
+/// Main-actor isolated: views read `index` directly, while the expensive
+/// scanning and metadata work is awaited inside nonisolated helpers.
+@MainActor
 public final class LibraryStore {
     public var index: LibraryIndex
     public var playlists: [Playlist]
@@ -39,6 +43,16 @@ public final class LibraryStore {
         index = store.loadIndex()
         playlists = store.loadPlaylists()
         settings = store.loadSettings()
+    }
+
+    /// Settings are written through the store that owns them, so `AppModel`
+    /// never needs a second `IndexStore` competing for the same file.
+    public func saveSettings() {
+        do {
+            try store.saveSettings(settings)
+        } catch {
+            lastError = error
+        }
     }
 
     public func addFolder(

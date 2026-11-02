@@ -4,10 +4,10 @@ import Combine
 import Foundation
 
 /// Plays one file at a time on an `AVAudioEngine`, publishing position,
-/// duration and a 24-band spectrum.
+/// duration and (when enabled) a 24-band spectrum.
 ///
-/// All published state is updated on the main queue. The spectrum math lives
-/// here for now; Task 14 extracts a shared `SpectrumAnalyzer`.
+/// All published state is updated on the main queue. Spectrum analysis is
+/// opt-in so normal playback pays for neither the tap nor the FFT.
 public final class PlayerEngine: ObservableObject {
     public static let bandCount = 24
 
@@ -15,11 +15,28 @@ public final class PlayerEngine: ObservableObject {
     @Published public private(set) var position: TimeInterval = 0
     @Published public private(set) var duration: TimeInterval = 0
     @Published public private(set) var spectrum: [Float] = Array(repeating: 0, count: PlayerEngine.bandCount)
+    /// Reason for the most recent load/start/seek failure, for the UI.
+    @Published public private(set) var lastError: String?
 
     /// Called on the main queue after the scheduled segment finishes naturally.
     public var onFinish: (() -> Void)?
 
+    /// The main window does not draw a spectrum yet, so the tap is not
+    /// installed by default. Task 14 turns this on when a spectrum view exists.
+    public var isSpectrumEnabled = false {
+        didSet {
+            guard isSpectrumEnabled != oldValue else { return }
+            if isSpectrumEnabled {
+                if let engine { installTap(on: engine) }
+            } else if tapInstalled, let engine {
+                engine.mainMixerNode.removeTap(onBus: 0)
+                tapInstalled = false
+            }
+        }
+    }
+
     private static let fftSize = 1024
+    private static let spectrumInterval: TimeInterval = 1.0 / 20.0
 
     /// Created on first use. Building an `AVAudioEngine` talks to CoreAudio's
     /// HAL, which can block for seconds during app launch; deferring it keeps
@@ -37,6 +54,8 @@ public final class PlayerEngine: ObservableObject {
     /// callbacks from `playerNode.stop()` are ignored.
     private var generation = 0
     private var positionTimer: Timer?
+    private var tapInstalled = false
+    private var lastSpectrumPublish: TimeInterval = 0
 
     public init() {
         var window = [Float](repeating: 0, count: Self.fftSize)
@@ -48,7 +67,9 @@ public final class PlayerEngine: ObservableObject {
         positionTimer?.invalidate()
         if let engine {
             engine.stop()
-            engine.mainMixerNode.removeTap(onBus: 0)
+            if tapInstalled {
+                engine.mainMixerNode.removeTap(onBus: 0)
+            }
         }
     }
 
@@ -56,17 +77,36 @@ public final class PlayerEngine: ObservableObject {
         if let engine { return engine }
         let engine = AVAudioEngine()
         engine.attach(playerNode)
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Self.fftSize), format: nil) { [weak self] buffer, _ in
-            self?.handleTap(buffer)
+        // On some LaunchServices sessions CoreAudio's HAL blocks inside
+        // `mainMixerNode`/the output unit. This call is synchronous, so the app
+        // cannot surface that as an error; it only reports success once
+        // `isPlaying` becomes true after `play()`.
+        if isSpectrumEnabled {
+            installTap(on: engine)
         }
         self.engine = engine
         return engine
     }
 
+    private func installTap(on engine: AVAudioEngine) {
+        guard !tapInstalled else { return }
+        engine.mainMixerNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Self.fftSize), format: nil) { [weak self] buffer, _ in
+            self?.handleTap(buffer)
+        }
+        tapInstalled = true
+    }
+
     // MARK: - Controls
 
     public func load(url: URL) throws {
-        let file = try AVAudioFile(forReading: url)
+        lastError = nil
+        let file: AVAudioFile
+        do {
+            file = try AVAudioFile(forReading: url)
+        } catch {
+            lastError = "无法读取音频文件（\(error.localizedDescription)）"
+            throw error
+        }
 
         generation += 1
         playerNode.stop()
@@ -86,13 +126,19 @@ public final class PlayerEngine: ObservableObject {
     }
 
     public func play() {
-        guard file != nil else { return }
+        lastError = nil
+        guard file != nil else {
+            lastError = "没有加载音频文件"
+            return
+        }
         let engine = ensureEngine()
         if !engine.isRunning {
             engine.prepare()
             do {
                 try engine.start()
             } catch {
+                lastError = "音频引擎启动失败（\(error.localizedDescription)）"
+                isPlaying = false
                 return
             }
         }
@@ -120,6 +166,7 @@ public final class PlayerEngine: ObservableObject {
 
     public func seek(to time: TimeInterval) {
         guard let file else { return }
+        lastError = nil
         let engine = ensureEngine()
         let wasPlaying = isPlaying
         let clamped = min(max(time, 0), duration)
@@ -132,7 +179,14 @@ public final class PlayerEngine: ObservableObject {
         if wasPlaying, segmentScheduled {
             if !engine.isRunning {
                 engine.prepare()
-                try? engine.start()
+                do {
+                    try engine.start()
+                } catch {
+                    lastError = "音频引擎启动失败（\(error.localizedDescription)）"
+                    isPlaying = false
+                    stopPositionTimer()
+                    return
+                }
             }
             playerNode.play()
             isPlaying = true
@@ -206,7 +260,7 @@ public final class PlayerEngine: ObservableObject {
 
     private func startPositionTimer() {
         stopPositionTimer()
-        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let self, self.isPlaying else { return }
             self.position = self.currentPlaybackPosition
             self.pausedPosition = self.position
@@ -223,6 +277,11 @@ public final class PlayerEngine: ObservableObject {
     // MARK: - Spectrum
 
     private func handleTap(_ buffer: AVAudioPCMBuffer) {
+        guard isSpectrumEnabled else { return }
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastSpectrumPublish >= Self.spectrumInterval else { return }
+        lastSpectrumPublish = now
+
         guard let channels = buffer.floatChannelData, fft != nil else { return }
         let frameCount = Int(buffer.frameLength)
         let channelCount = Int(buffer.format.channelCount)
