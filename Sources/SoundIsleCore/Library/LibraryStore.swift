@@ -167,6 +167,25 @@ public final class LibraryStore {
         }
     }
 
+    /// Adds imported folders so files organized into a new root survive the
+    /// next rescan. Returns true when `index.folders` changed.
+    @discardableResult
+    public func ensureFoldersCovering(_ urls: [URL]) -> Bool {
+        var folders = index.folders
+        var changed = false
+        for url in urls {
+            let updated = FolderCoverage.ensureCovered(destination: url, folders: folders)
+            if updated != folders {
+                folders = updated
+                changed = true
+            }
+        }
+        guard changed else { return false }
+        index.folders = folders
+        saveIndex()
+        return true
+    }
+
     public func removeMissingTracks() {
         removeTracks { $0.isMissing }
     }

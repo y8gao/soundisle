@@ -250,4 +250,46 @@ final class FileOrganizerTests: XCTestCase {
         XCTAssertEqual(reloaded.tracks.first?.id, track.id)
         XCTAssertEqual(reloaded.tracks.first?.url.standardizedFileURL, destination.standardizedFileURL)
     }
+
+    /// Files organized into a brand-new root must stay visible: the root is
+    /// added to `index.folders`, so a later rescan still finds the track.
+    @MainActor
+    func testRescanFindsTrackAfterOrganizingIntoNewRoot() async throws {
+        let dataDirectory = tempDir.appendingPathComponent("data-rescan", isDirectory: true)
+        let library = LibraryStore(directory: dataDirectory)
+        library.index.folders = [libraryDir]
+        try makeFile("song.wma", in: libraryDir, contents: "dummy audio")
+
+        await library.rescan()
+        let original = try XCTUnwrap(library.index.tracks.first { $0.url.lastPathComponent == "song.wma" })
+
+        let organizer = makeOrganizer()
+        let items = organizer.plan(
+            library.index.tracks,
+            template: "{artist}/{album}/{title}",
+            root: destinationRoot,
+            copy: false
+        )
+        try organizer.apply(items, copy: false)
+        XCTAssertEqual(items.count, 1)
+
+        library.updateTrackURLs([
+            items[0].source.standardizedFileURL: items[0].destination.standardizedFileURL
+        ])
+        XCTAssertTrue(library.ensureFoldersCovering([destinationRoot]))
+
+        await library.rescan()
+
+        let rescanned = library.index.tracks.first { $0.id == original.id }
+        XCTAssertEqual(rescanned?.url.standardizedFileURL, items[0].destination.standardizedFileURL)
+        XCTAssertEqual(rescanned?.isMissing, false)
+        XCTAssertTrue(library.index.folders.contains {
+            $0.standardizedFileURL == destinationRoot.standardizedFileURL
+        })
+
+        let reloaded = IndexStore(directory: dataDirectory).loadIndex()
+        XCTAssertTrue(reloaded.folders.contains {
+            $0.standardizedFileURL == destinationRoot.standardizedFileURL
+        })
+    }
 }

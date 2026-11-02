@@ -288,7 +288,7 @@ struct OrganizerPreviewView: View {
             }
         }
 
-        if let error = model.performOrganize(plan, copy: copy) {
+        if let error = model.performOrganize(plan, copy: copy, destinationRoot: destinationRoot) {
             errorMessage = error
         } else {
             dismiss()

@@ -449,7 +449,13 @@ final class AppModel: ObservableObject {
 
     /// Executes a previewed plan and points the affected tracks at their new
     /// URLs. Returns a Chinese error for the sheet, or nil on success.
-    func performOrganize(_ items: [OrganizePlanItem], copy: Bool) -> String? {
+    /// `destinationRoot` is added to the imported folders when it was outside
+    /// them, so a later rescan does not mark the moved tracks missing.
+    func performOrganize(
+        _ items: [OrganizePlanItem],
+        copy: Bool,
+        destinationRoot: URL
+    ) -> String? {
         guard !items.isEmpty else { return "没有需要整理的文件。" }
         do {
             try organizer.apply(items, copy: copy)
@@ -457,8 +463,10 @@ final class AppModel: ObservableObject {
             // A mid-run failure still moved the earlier rows; keep the index
             // truthful for those before showing the error.
             if let organizeError = error as? OrganizeError,
-               case let .applyFailed(applied, _) = organizeError {
+               case let .applyFailed(applied, _) = organizeError,
+               !applied.isEmpty {
                 updateTrackURLs(for: applied)
+                library.ensureFoldersCovering([destinationRoot])
             }
             organizeUndoCount = organizer.undo.entries.count
             let message = error.localizedDescription
@@ -467,6 +475,7 @@ final class AppModel: ObservableObject {
         }
 
         updateTrackURLs(for: items)
+        library.ensureFoldersCovering([destinationRoot])
         organizeUndoCount = organizer.undo.entries.count
         statusMessage = copy
             ? "已复制 \(items.count) 个文件。"
@@ -487,6 +496,13 @@ final class AppModel: ObservableObject {
                 ($0.destination.standardizedFileURL, $0.source.standardizedFileURL)
             })
             library.updateTrackURLs(mapping)
+            // Restored files normally land back in an imported folder; cover
+            // them anyway so undo never leaves a track unscanned.
+            library.ensureFoldersCovering(
+                items
+                    .map { $0.source.deletingLastPathComponent().standardizedFileURL }
+                    .filter { $0.path != "/" }
+            )
             refreshFromLibrary()
             organizeUndoCount = organizer.undo.entries.count
             let message = "已撤销上次整理，\(items.count) 个文件已恢复原位。"
