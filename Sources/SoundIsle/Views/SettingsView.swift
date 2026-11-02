@@ -12,6 +12,7 @@ struct SettingsView: View {
     /// Undo/clear feedback stays visible inside this sheet instead of only in
     /// the track list behind it.
     @State private var notice: String?
+    @State private var folderNotice: String?
     @State private var cacheNotice: String?
 
     private var settings: AppSettings { model.library.settings }
@@ -55,7 +56,9 @@ struct SettingsView: View {
                 .padding(22)
             }
         }
-        .frame(width: 580, height: 680)
+        // Keep the sheet shorter than the 600pt minimum main window so a
+        // minimized window can still present it; the content scrolls.
+        .frame(width: 580, height: 560)
         .background(AppBackground())
         .soundIsleTheme(palette)
         .onAppear { model.refreshTranscodeCacheSize() }
@@ -119,7 +122,7 @@ struct SettingsView: View {
                         .foregroundColor(palette.warning)
                     Spacer(minLength: 8)
                     Button("移除缺失条目") {
-                        notice = model.removeMissingTracks()
+                        folderNotice = model.removeMissingTracks()
                     }
                 }
                 ForEach(missing.prefix(3)) { track in
@@ -169,6 +172,12 @@ struct SettingsView: View {
                         .font(.system(size: 10.5))
                         .foregroundColor(palette.text.opacity(0.4))
                 }
+            }
+            if let folderNotice {
+                Text(folderNotice)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.accentLight)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

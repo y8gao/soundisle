@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Draws the 24 engine bands in an `NSView`. The view subscribes to
 /// `PlayerEngine.$spectrum` itself, so SwiftUI is never re-rendered at the
-/// ~24 fps publish rate; only this small rect is redrawn.
+/// ~20 fps publish rate; only this small rect is redrawn.
 struct SpectrumBarsView: NSViewRepresentable {
     let engine: PlayerEngine
     let bottomColor: Color

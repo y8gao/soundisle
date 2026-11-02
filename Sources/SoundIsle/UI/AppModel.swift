@@ -100,6 +100,7 @@ final class AppModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var saveTimer: Timer?
+    private var customAccentSaveTask: Task<Void, Never>?
     private var keyMonitor: Any?
     private var didStart = false
     /// Anchor row for Shift-click range selection.
@@ -162,6 +163,7 @@ final class AppModel: ObservableObject {
 
     deinit {
         lyricsTask?.cancel()
+        customAccentSaveTask?.cancel()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         saveTimer?.invalidate()
     }
@@ -1347,10 +1349,18 @@ final class AppModel: ObservableObject {
         saveSettingsAndNotify()
     }
 
+    /// Applied live for immediate preview, but the JSON write is debounced:
+    /// `ColorPicker` emits continuously while the user drags the colour wheel.
     func setCustomAccent(hex: String?) {
         guard library.settings.customAccentHex != hex else { return }
         library.settings.customAccentHex = hex
-        saveSettingsAndNotify()
+        objectWillChange.send()
+        customAccentSaveTask?.cancel()
+        customAccentSaveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.library.saveSettings()
+        }
     }
 
     func setRowStyle(cover: Bool) {

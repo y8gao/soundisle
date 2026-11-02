@@ -111,11 +111,13 @@ public struct SpectrumAnalyzer {
 
         let binCount = half
         let maximum = min(Self.maximumFrequency, sampleRate / 2)
-        guard binCount > 0, maximum > Self.minimumFrequency else { return }
+        guard binCount > 0, maximum > Self.minimumFrequency else {
+            for index in output.indices { output[index] = 0 }
+            return
+        }
 
         let hertzPerBin = sampleRate / Double(fftSize)
         let frequencyRatio = maximum / Self.minimumFrequency
-        var loudest: Float = 0
         for band in 0..<bandCount {
             let low = Self.minimumFrequency * pow(frequencyRatio, Double(band) / Double(bandCount))
             let high = Self.minimumFrequency * pow(frequencyRatio, Double(band + 1) / Double(bandCount))
@@ -126,16 +128,12 @@ public struct SpectrumAnalyzer {
             for bin in lowBin...highBin {
                 peak = max(peak, magnitudes[bin])
             }
-            loudest = max(loudest, peak)
             // vDSP's real FFT is unnormalised; the Hann window makes a
             // full-scale sine peak near fftSize / 4. sqrt keeps quiet passages
-            // visible without a per-frame automatic gain control.
+            // visible without a per-frame automatic gain control. Silence gives
+            // peak 0 and therefore an exact 0 in the output.
             let normalised = peak * 2 / Float(fftSize)
             output[band] = min(1, sqrt(max(0, normalised)))
-        }
-
-        if loudest <= 0 {
-            for band in output.indices { output[band] = 0 }
         }
     }
 }

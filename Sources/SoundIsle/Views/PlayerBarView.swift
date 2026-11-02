@@ -226,7 +226,7 @@ private struct PlayerProgressView: View {
             .frame(width: 360)
         }
         // Only position/duration drive this row. Observing the whole engine
-        // would re-render it at the spectrum's ~24 fps.
+        // would re-render it at the spectrum's ~20 fps.
         .onReceive(engine.$position) { position = $0 }
         .onReceive(engine.$duration) { duration = $0 }
         .onAppear {

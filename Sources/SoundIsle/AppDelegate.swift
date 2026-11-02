@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         miniPlayer.onExpand = { [weak self] in self?.showMainWindow() }
         self.miniPlayer = miniPlayer
         model.miniPlayer = miniPlayer
+        // Apply a persisted `showMainSpectrum` even when the mini starts hidden.
+        model.refreshSpectrumConsumers()
 
         let lyricsOverlay = LyricsOverlayWindowController(model: model)
         lyricsOverlay.setLocked(model.isLyricsLocked)

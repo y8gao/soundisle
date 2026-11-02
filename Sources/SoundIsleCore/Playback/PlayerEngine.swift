@@ -34,7 +34,7 @@ public final class PlayerEngine: ObservableObject {
         }
     }
 
-    private static let spectrumInterval: TimeInterval = 1.0 / 24.0
+    private static let spectrumInterval: TimeInterval = 1.0 / 20.0
 
     /// Created on first use. Building an `AVAudioEngine` talks to CoreAudio's
     /// HAL, which can block for seconds during app launch; deferring it keeps
@@ -324,6 +324,11 @@ public final class PlayerEngine: ObservableObject {
     // MARK: - Spectrum
 
     private func handleTap(_ buffer: AVAudioPCMBuffer) {
+        // Runs on CoreAudio's render thread. The two published flags are read
+        // as a best-effort gate and the scratch buffers are audio-thread-only;
+        // they are not touched from the main thread, so the only race is the
+        // benign one on `isSpectrumEnabled`/`isPlaying` (a stale read just
+        // drops or emits one extra frame). TSan will flag the flag reads.
         guard isSpectrumEnabled, isPlaying, let channels = buffer.floatChannelData else { return }
         let now = CFAbsoluteTimeGetCurrent()
         guard now - lastSpectrumPublish >= Self.spectrumInterval else { return }
@@ -368,11 +373,11 @@ public final class PlayerEngine: ObservableObject {
     }
 
     /// Fades the last frame to rest after pausing; the tap is already gone, so
-    /// this runs at the same ~24 fps for well under a second.
+    /// this runs at the same ~20 fps for well under a second.
     private func startSpectrumDecay() {
         stopSpectrumDecay()
         guard spectrum.contains(where: { $0 > 0 }) else { return }
-        let timer = Timer(timeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 20.0, repeats: true) { [weak self] _ in
             guard let self else { return }
             let next = self.spectrum.map { $0 * 0.68 }
             if next.allSatisfy({ $0 < 0.01 }) {

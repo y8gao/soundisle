@@ -57,4 +57,36 @@ final class SpectrumAnalyzerTests: XCTestCase {
         let bands = SpectrumAnalyzer.computeBands(samples: sine(frequency: 1000), sampleRate: 44100)
         XCTAssertTrue(bands.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 1 })
     }
+
+    func testReusedOutputIsClearedBySilence() {
+        var analyzer = SpectrumAnalyzer()
+        var output = [Float](repeating: 1, count: 24)
+
+        sine(frequency: 1000).withUnsafeBufferPointer { samples in
+            analyzer.process(samples, sampleRate: 44100, into: &output)
+        }
+        XCTAssertGreaterThan(output.max()!, 0.1)
+
+        let silence = [Float](repeating: 0, count: 1024)
+        silence.withUnsafeBufferPointer { samples in
+            analyzer.process(samples, sampleRate: 44100, into: &output)
+        }
+        XCTAssertEqual(output, [Float](repeating: 0, count: 24))
+    }
+
+    func testLowSampleRateClearsReusedOutput() {
+        var analyzer = SpectrumAnalyzer()
+        var output = [Float](repeating: 1, count: 24)
+
+        sine(frequency: 440).withUnsafeBufferPointer { samples in
+            analyzer.process(samples, sampleRate: 44100, into: &output)
+        }
+        XCTAssertGreaterThan(output.max()!, 0)
+
+        // Nyquist below the 40 Hz lowest band: nothing can be mapped.
+        sine(frequency: 20).withUnsafeBufferPointer { samples in
+            analyzer.process(samples, sampleRate: 60, into: &output)
+        }
+        XCTAssertEqual(output, [Float](repeating: 0, count: 24))
+    }
 }

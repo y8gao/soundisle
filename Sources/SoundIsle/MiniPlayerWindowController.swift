@@ -65,8 +65,10 @@ final class MiniPlayerWindowController {
         }
         applySettings()
         panel.setFrameOrigin(restoredOrigin())
-        refreshSpectrumConsumers()
         panel.orderFront(nil)
+        // `isVisible` only becomes true after ordering front, so the spectrum
+        // consumer check must run afterwards.
+        refreshSpectrumConsumers()
     }
 
     func hide() {
