@@ -465,7 +465,7 @@ final class AppModel: ObservableObject {
             if let organizeError = error as? OrganizeError,
                case let .applyFailed(applied, _) = organizeError,
                !applied.isEmpty {
-                updateTrackURLs(for: applied)
+                applyTrackURLs(for: applied)
                 library.ensureFoldersCovering([destinationRoot])
             }
             organizeUndoCount = organizer.undo.entries.count
@@ -474,7 +474,7 @@ final class AppModel: ObservableObject {
             return message
         }
 
-        updateTrackURLs(for: items)
+        applyTrackURLs(for: items)
         library.ensureFoldersCovering([destinationRoot])
         organizeUndoCount = organizer.undo.entries.count
         statusMessage = copy
@@ -485,44 +485,58 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func undoLastOrganize() -> String {
+        let wasCopy = organizer.undo.entries.last?.copy ?? false
         do {
             guard let items = try organizer.undoLast() else {
                 let message = "没有可撤销的整理。"
                 statusMessage = message
                 return message
             }
-            // Undo put files back at `source`; flip the mapping direction.
-            let mapping = Dictionary(uniqueKeysWithValues: items.map {
-                ($0.destination.standardizedFileURL, $0.source.standardizedFileURL)
-            })
-            library.updateTrackURLs(mapping)
-            // Restored files normally land back in an imported folder; cover
-            // them anyway so undo never leaves a track unscanned.
-            library.ensureFoldersCovering(
-                items
-                    .map { $0.source.deletingLastPathComponent().standardizedFileURL }
-                    .filter { $0.path != "/" }
-            )
-            refreshFromLibrary()
+            restoreTrackURLs(for: items)
             organizeUndoCount = organizer.undo.entries.count
-            let message = "已撤销上次整理，\(items.count) 个文件已恢复原位。"
+            let message: String
+            if items.isEmpty {
+                message = wasCopy ? "没有可删除的副本。" : "没有可恢复的文件。"
+            } else if wasCopy {
+                message = "已删除 \(items.count) 个副本，原文件保留。"
+            } else {
+                message = "已恢复 \(items.count) 个文件到原位置。"
+            }
             statusMessage = message
             return message
         } catch {
             organizeUndoCount = organizer.undo.entries.count
-            let message = error.localizedDescription
+            // A partially failed undo already put some files back. Point those
+            // tracks at their sources now; otherwise the next rescan would
+            // mark them missing and re-add them with new IDs.
+            var message = error.localizedDescription
+            if let organizeError = error as? OrganizeError,
+               case let .undoFailed(restored, _) = organizeError,
+               !restored.isEmpty {
+                restoreTrackURLs(for: restored)
+                message += "（已恢复 \(restored.count) 个文件，其余保留在目标位置）"
+            }
             statusMessage = message
             return message
         }
     }
 
-    private func updateTrackURLs(for items: [OrganizePlanItem]) {
+    private func applyTrackURLs(for items: [OrganizePlanItem]) {
         guard !items.isEmpty else { return }
-        var mapping: [URL: URL] = [:]
-        for item in items {
-            mapping[item.source.standardizedFileURL] = item.destination.standardizedFileURL
-        }
-        library.updateTrackURLs(mapping)
+        library.updateTrackURLs(OrganizeURLMapping.apply(items))
+        refreshFromLibrary()
+    }
+
+    private func restoreTrackURLs(for items: [OrganizePlanItem]) {
+        guard !items.isEmpty else { return }
+        library.updateTrackURLs(OrganizeURLMapping.undo(items))
+        // Restored files normally land back in an imported folder; cover them
+        // anyway so undo never leaves a track unscanned.
+        library.ensureFoldersCovering(
+            items
+                .map { $0.source.deletingLastPathComponent().standardizedFileURL }
+                .filter { $0.path != "/" }
+        )
         refreshFromLibrary()
     }
 

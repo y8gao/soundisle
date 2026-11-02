@@ -51,8 +51,9 @@ public final class OrganizeUndoStore {
         entries = updated
     }
 
-    /// Reverses the newest plan and returns it. Missing destinations are
-    /// skipped: a partially applied plan stays undoable.
+    /// Reverses the newest plan and returns the rows it actually restored.
+    /// Missing destinations are skipped: a partially applied plan stays
+    /// undoable, and the caller's restored count is truthful.
     public func undoLast() throws -> [OrganizePlanItem]? {
         guard let entry = entries.last else { return nil }
 
@@ -85,7 +86,7 @@ public final class OrganizeUndoStore {
         updated.removeLast()
         try Self.save(updated, to: fileURL, manager: manager)
         entries = updated
-        return entry.items
+        return restored
     }
 
     public func clear() throws {

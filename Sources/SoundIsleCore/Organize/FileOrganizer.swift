@@ -15,6 +15,26 @@ public struct OrganizePlanItem: Codable, Equatable {
     }
 }
 
+/// URL mappings the library applies after an organize run. Kept in the core so
+/// partial apply/undo paths share (and can test) the same direction logic.
+public enum OrganizeURLMapping {
+    public static func apply(_ items: [OrganizePlanItem]) -> [URL: URL] {
+        var mapping: [URL: URL] = [:]
+        for item in items {
+            mapping[item.source.standardizedFileURL] = item.destination.standardizedFileURL
+        }
+        return mapping
+    }
+
+    public static func undo(_ items: [OrganizePlanItem]) -> [URL: URL] {
+        var mapping: [URL: URL] = [:]
+        for item in items {
+            mapping[item.destination.standardizedFileURL] = item.source.standardizedFileURL
+        }
+        return mapping
+    }
+}
+
 public enum OrganizeError: LocalizedError {
     case sourceMissing(URL)
     case destinationExists(URL)
@@ -119,7 +139,9 @@ public final class FileOrganizer {
     }
 
     /// Whether a move would cross volumes. The UI asks for confirmation before
-    /// the source is deleted, because that move is copy-then-delete.
+    /// the source is deleted, because that move is copy-then-delete. If the
+    /// volumes cannot be determined, this returns true: failing closed asks
+    /// the user rather than deleting without consent.
     public static func crossesVolumes(
         source: URL,
         destination: URL,
@@ -127,7 +149,7 @@ public final class FileOrganizer {
     ) -> Bool {
         guard let from = volumeIdentifier(for: source, manager: manager),
               let to = volumeIdentifier(for: destination, manager: manager) else {
-            return false
+            return true
         }
         return from != to
     }
@@ -156,13 +178,16 @@ public final class FileOrganizer {
     }
 
     private static func volumeIdentifier(for url: URL, manager: FileManager) -> NSObject? {
-        var probe = url.standardizedFileURL
-        while !manager.fileExists(atPath: probe.path) {
-            let parent = probe.deletingLastPathComponent()
-            if parent.path == probe.path { return nil }
-            probe = parent
+        // Walk string paths: URL.deletingLastPathComponent() turns "/" into
+        // "/..", which would loop forever when nothing exists on disk.
+        var path = url.standardizedFileURL.path
+        while !manager.fileExists(atPath: path) {
+            let parent = (path as NSString).deletingLastPathComponent
+            if parent == path || parent.isEmpty { return nil }
+            path = parent
         }
-        guard let values = try? probe.resourceValues(forKeys: [.volumeIdentifierKey]) else {
+        guard let values = try? URL(fileURLWithPath: path)
+            .resourceValues(forKeys: [.volumeIdentifierKey]) else {
             return nil
         }
         return values.volumeIdentifier as? NSObject

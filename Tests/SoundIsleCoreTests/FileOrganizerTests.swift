@@ -229,6 +229,165 @@ final class FileOrganizerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
     }
 
+    // MARK: - Data-loss paths
+
+    func testApplyRefusesExistingDestinationWithoutOverwriting() throws {
+        let source = try makeFile("a.mp3", in: libraryDir, contents: "source")
+        let organizer = makeOrganizer()
+        let items = organizer.plan(
+            [motherTrack(url: source)],
+            template: motherTemplate,
+            root: destinationRoot,
+            copy: false
+        )
+        // The destination appears after the preview was produced.
+        let existing = try makeFile(
+            items[0].destination.lastPathComponent,
+            in: items[0].destination.deletingLastPathComponent(),
+            contents: "keep-me"
+        )
+
+        XCTAssertThrowsError(try organizer.apply(items, copy: false)) { error in
+            guard let organizeError = error as? OrganizeError,
+                  case .destinationExists(_) = organizeError else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertEqual(try String(contentsOf: existing, encoding: .utf8), "keep-me")
+        XCTAssertTrue(organizer.undo.entries.isEmpty)
+    }
+
+    func testPartialApplyThenUndoReturnsOnlyAppliedRows() throws {
+        let firstSource = try makeFile("a.mp3", in: libraryDir, contents: "a")
+        let secondSource = try makeFile("b.mp3", in: libraryDir, contents: "b")
+        var second = motherTrack(url: secondSource)
+        // Different artist => different destination parent, so only the second
+        // row can be blocked.
+        second.artist = ""
+        let organizer = makeOrganizer()
+        let items = organizer.plan(
+            [motherTrack(url: firstSource), second],
+            template: motherTemplate,
+            root: destinationRoot,
+            copy: false
+        )
+        XCTAssertEqual(items.count, 2)
+
+        let blockedParent = items[1].destination.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: blockedParent.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("not-a-directory".utf8).write(to: blockedParent)
+
+        XCTAssertThrowsError(try organizer.apply(items, copy: false)) { error in
+            guard let organizeError = error as? OrganizeError,
+                  case let .applyFailed(applied, _) = organizeError else {
+                return XCTFail("unexpected error: \(error)")
+            }
+            XCTAssertEqual(applied, [items[0]])
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: items[0].destination.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: secondSource.path))
+
+        // The un-applied row has no destination, so undo reports only the row
+        // that actually moved and still clears the entry.
+        let restored = try organizer.undoLast()
+        XCTAssertEqual(restored, [items[0]])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstSource.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: items[0].destination.path))
+        XCTAssertNil(try organizer.undoLast())
+    }
+
+    @MainActor
+    func testPartialUndoFailureUpdatesRestoredTrackAndRescanKeepsIdentity() async throws {
+        let dataDirectory = tempDir.appendingPathComponent("data-partial-undo", isDirectory: true)
+        let library = LibraryStore(directory: dataDirectory)
+        library.index.folders = [libraryDir]
+        // Non-native extension so the scanner includes these dummy files.
+        try makeFile("a.wma", in: libraryDir, contents: "a")
+        try makeFile("b.wma", in: libraryDir, contents: "b")
+        await library.rescan()
+        XCTAssertEqual(library.index.tracks.count, 2)
+        let idBySource = Dictionary(uniqueKeysWithValues: library.index.tracks.map {
+            ($0.url.standardizedFileURL, $0.id)
+        })
+
+        let organizer = makeOrganizer()
+        let items = organizer.plan(
+            library.index.tracks,
+            template: "{title}",
+            root: destinationRoot,
+            copy: false
+        )
+        XCTAssertEqual(items.count, 2)
+        try organizer.apply(items, copy: false)
+        library.updateTrackURLs(OrganizeURLMapping.apply(items))
+        library.ensureFoldersCovering([destinationRoot])
+        await library.rescan()
+
+        // Undo walks rows in reverse: items[1] restores, then items[0] hits
+        // the recreated source path and fails.
+        try makeFile(items[0].source.lastPathComponent, in: libraryDir, contents: "conflict")
+
+        var restored: [OrganizePlanItem] = []
+        do {
+            _ = try organizer.undoLast()
+            XCTFail("undo should fail on the conflicting source")
+        } catch let error as OrganizeError {
+            guard case let .undoFailed(rows, _) = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+            restored = rows
+        }
+
+        XCTAssertEqual(restored, [items[1]])
+
+        // Mirrors AppModel's catch branch: the successfully restored row must
+        // update the index immediately, or the next rescan loses its ID.
+        library.updateTrackURLs(OrganizeURLMapping.undo(restored))
+        for item in items {
+            let id = try XCTUnwrap(idBySource[item.source.standardizedFileURL])
+            let track = try XCTUnwrap(library.index.tracks.first { $0.id == id })
+            let expected = item == items[0] ? item.destination : item.source
+            XCTAssertEqual(track.url.standardizedFileURL, expected.standardizedFileURL)
+        }
+
+        await library.rescan()
+        for item in items {
+            let id = try XCTUnwrap(idBySource[item.source.standardizedFileURL])
+            XCTAssertEqual(library.index.tracks.filter { $0.id == id }.count, 1)
+            let track = try XCTUnwrap(library.index.tracks.first { $0.id == id })
+            XCTAssertFalse(track.isMissing)
+            let expected = item == items[0] ? item.destination : item.source
+            XCTAssertEqual(track.url.standardizedFileURL, expected.standardizedFileURL)
+        }
+    }
+
+    func testCrossVolumeCheckFailsClosedWhenVolumesAreUnknown() {
+        // A manager that sees no filesystem forces `volumeIdentifier` to
+        // return nil; the safe answer is "ask the user".
+        XCTAssertTrue(
+            FileOrganizer.crossesVolumes(
+                source: tempDir.appendingPathComponent("a.mp3"),
+                destination: tempDir.appendingPathComponent("b.mp3"),
+                manager: NothingExistsFileManager()
+            )
+        )
+    }
+
+    func testCrossVolumeCheckSeesSameVolume() {
+        XCTAssertFalse(
+            FileOrganizer.crossesVolumes(
+                source: libraryDir.appendingPathComponent("a.mp3"),
+                destination: destinationRoot.appendingPathComponent("b.mp3")
+            )
+        )
+    }
+
     // MARK: - Library URL updates
 
     @MainActor
@@ -292,4 +451,9 @@ final class FileOrganizerTests: XCTestCase {
             $0.standardizedFileURL == destinationRoot.standardizedFileURL
         })
     }
+}
+
+/// Simulates an unreadable filesystem so volume detection cannot resolve.
+private final class NothingExistsFileManager: FileManager {
+    override func fileExists(atPath path: String) -> Bool { false }
 }
