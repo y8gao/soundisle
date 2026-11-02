@@ -54,6 +54,7 @@ public struct AVFoundationMetadataReader: MetadataReading {
         guard seconds.isFinite, seconds >= 0 else { return nil }
 
         var metadata = AudioMetadata(duration: seconds)
+        var predefinedGenre: String?
         let common = (try? await asset.load(.commonMetadata)) ?? []
         let all = (try? await asset.load(.metadata)) ?? []
 
@@ -88,16 +89,21 @@ public struct AVFoundationMetadataReader: MetadataReading {
                      AVMetadataIdentifier.quickTimeMetadataYear.rawValue:
                     if metadata.year == nil { metadata.year = await year(of: item) }
                 case AVMetadataIdentifier.iTunesMetadataUserGenre.rawValue,
-                     AVMetadataIdentifier.iTunesMetadataPredefinedGenre.rawValue,
                      AVMetadataIdentifier.id3MetadataContentType.rawValue,
                      AVMetadataIdentifier.quickTimeMetadataGenre.rawValue:
                     if metadata.genre == nil { metadata.genre = await text(of: item) }
+                case AVMetadataIdentifier.iTunesMetadataPredefinedGenre.rawValue:
+                    // Numeric genre index; only a fallback for a missing text genre.
+                    if predefinedGenre == nil { predefinedGenre = await text(of: item) }
                 default:
                     break
                 }
             }
         }
 
+        if metadata.genre == nil {
+            metadata.genre = predefinedGenre
+        }
         return metadata
     }
 
@@ -113,11 +119,16 @@ public struct AVFoundationMetadataReader: MetadataReading {
     }
 
     private func year(of item: AVMetadataItem) async -> Int? {
-        if let date = try? await item.load(.dateValue),
-           let year = Calendar(identifier: .gregorian).dateComponents([.year], from: date).year {
+        // Text first: file-backed ID3 items can expose a spurious dateValue.
+        if let year = await text(of: item).flatMap(Self.year(from:)) {
             return year
         }
-        return await text(of: item).flatMap(Self.year(from:))
+        if let date = try? await item.load(.dateValue) {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+            return calendar.dateComponents([.year], from: date).year
+        }
+        return nil
     }
 
     private static func leadingInt(from string: String) -> Int? {

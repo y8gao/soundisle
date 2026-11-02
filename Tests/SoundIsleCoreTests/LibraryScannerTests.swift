@@ -72,6 +72,50 @@ final class LibraryScannerTests: XCTestCase {
         }
     }
 
+    private func makeID3YearFixture(named name: String = "年份.mp3", year: String = "2020") throws -> URL {
+        func synchsafe(_ value: Int) -> [UInt8] {
+            [
+                UInt8((value >> 21) & 0x7f),
+                UInt8((value >> 14) & 0x7f),
+                UInt8((value >> 7) & 0x7f),
+                UInt8(value & 0x7f),
+            ]
+        }
+
+        let textBody: [UInt8] = [0] + Array(year.utf8)
+        var frame: [UInt8] = Array("TYER".utf8)
+        let size = textBody.count
+        frame += [
+            UInt8((size >> 24) & 0xff), UInt8((size >> 16) & 0xff),
+            UInt8((size >> 8) & 0xff), UInt8(size & 0xff),
+        ]
+        frame += [0, 0]
+        frame += textBody
+
+        var bytes: [UInt8] = Array("ID3".utf8) + [3, 0, 0] + synchsafe(frame.count) + frame
+        for _ in 0..<200 {
+            var audioFrame = [UInt8](repeating: 0, count: 417)
+            audioFrame[0] = 0xFF
+            audioFrame[1] = 0xFB
+            audioFrame[2] = 0x90
+            audioFrame[3] = 0x00
+            bytes += audioFrame
+        }
+
+        let url = tempDir.appendingPathComponent(name)
+        try Data(bytes).write(to: url)
+        return url
+    }
+
+    func testID3YearPrefersTextOverSpuriousDateValue() async throws {
+        let mp3 = try makeID3YearFixture()
+
+        let read = await AVFoundationMetadataReader().read(url: mp3)
+        let metadata = try XCTUnwrap(read)
+
+        XCTAssertEqual(metadata.year, 2020)
+    }
+
     func testReadsStandardTagsFromM4A() async throws {
         let source = try makeSilentWAV(named: "标签源.wav")
         let m4a = tempDir.appendingPathComponent("标签测试.m4a")
