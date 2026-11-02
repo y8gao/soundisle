@@ -6,6 +6,9 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    /// Undo/clear feedback stays visible inside this sheet instead of only in
+    /// the track list behind it.
+    @State private var notice: String?
 
     private struct Section {
         let title: String
@@ -88,18 +91,26 @@ struct SettingsView: View {
                     .foregroundColor(Theme.text.opacity(0.5))
                 HStack(spacing: 10) {
                     Button("撤销最近一次标签编辑") {
-                        model.undoLastTagEdit()
+                        notice = model.undoLastTagEdit()
                     }
                     .disabled(!model.canUndoTagEdit)
 
                     Button("清空编辑撤销记录") {
-                        confirmClearUndo()
+                        if confirmClearUndo() {
+                            notice = model.clearTagUndoHistory()
+                        }
                     }
                     .disabled(model.tagUndoCount == 0)
 
                     Text("\(model.tagUndoCount) 条记录")
                         .font(.system(size: 10.5))
                         .foregroundColor(Theme.text.opacity(0.4))
+                }
+                if let notice {
+                    Text(notice)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(Theme.accentLight)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
@@ -108,7 +119,7 @@ struct SettingsView: View {
         .glassPanel(cornerRadius: 10)
     }
 
-    private func confirmClearUndo() {
+    private func confirmClearUndo() -> Bool {
         let alert = NSAlert()
         alert.messageText = "清空编辑撤销记录？"
         alert.informativeText = "清空后无法再撤销之前保存的标签修改，音频文件本身不受影响。"
@@ -116,7 +127,6 @@ struct SettingsView: View {
         alert.addButton(withTitle: "取消")
         let response = alert.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
-        guard response == .alertFirstButtonReturn else { return }
-        model.clearTagUndoHistory()
+        return response == .alertFirstButtonReturn
     }
 }

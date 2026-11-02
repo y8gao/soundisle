@@ -30,19 +30,14 @@ struct TagEditorView: View {
     @State private var previewImage: NSImage?
     @State private var errorMessage: String?
     @State private var didLoad = false
+    /// Single-track prefill, used to detect which fields the user actually
+    /// touched so an emptied field can be cleared rather than ignored.
+    @State private var initialFields: TagFields?
 
     init(model: AppModel, tracks: [Track]) {
         self.model = model
         self.tracks = tracks
-        self.capabilities = tracks.reduce(TagFormatCapabilities()) { partial, track in
-            let next = TagFormatCapabilities.capabilities(for: track.url)
-            return TagFormatCapabilities(
-                canWrite: partial.canWrite && next.canWrite,
-                canWriteAlbumArtist: partial.canWriteAlbumArtist && next.canWriteAlbumArtist,
-                canWriteArtwork: partial.canWriteArtwork && next.canWriteArtwork,
-                limitation: partial.limitation ?? next.limitation
-            )
-        }
+        self.capabilities = TagFormatCapabilities.combined(for: tracks.map(\.url))
     }
 
     private var isBatch: Bool { tracks.count > 1 }
@@ -231,6 +226,7 @@ struct TagEditorView: View {
     }
 
     private var displayedCover: NSImage? {
+        if artworkEdit == "" { return nil }
         if let previewImage { return previewImage }
         if let base64 = currentArtworkBase64, let data = Data(base64Encoded: base64) {
             return NSImage(data: data)
@@ -270,6 +266,7 @@ struct TagEditorView: View {
         didLoad = true
         guard tracks.count == 1,
               let fields = model.tagService.read(from: tracks[0].url) else { return }
+        initialFields = fields
         title = fields.title ?? ""
         artist = fields.artist ?? ""
         album = fields.album ?? ""
@@ -281,29 +278,7 @@ struct TagEditorView: View {
     }
 
     private func save() {
-        var edits = TagFields()
-        edits.title = trimmedOrNil(title)
-        edits.artist = trimmedOrNil(artist)
-        edits.album = trimmedOrNil(album)
-        edits.albumArtist = trimmedOrNil(albumArtist)
-        edits.genre = trimmedOrNil(genre)
-
-        if let parsed = parseNumber(year, label: "年份", range: 1...9999) {
-            guard let value = parsed.value else {
-                errorMessage = parsed.error
-                return
-            }
-            edits.year = value
-        }
-        if let parsed = parseNumber(trackNumber, label: "曲目号", range: 1...65535) {
-            guard let value = parsed.value else {
-                errorMessage = parsed.error
-                return
-            }
-            edits.trackNumber = value
-        }
-        edits.artworkBase64 = artworkEdit
-
+        guard let edits = buildEdits() else { return }
         if let error = model.applyTagEdit(edits, to: tracks) {
             errorMessage = error
         } else {
@@ -311,9 +286,108 @@ struct TagEditorView: View {
         }
     }
 
+    /// Batch mode: blank means "leave unchanged". Single mode: compare with
+    /// the prefilled values so clearing a field sends "" (a real clear) and
+    /// untouched fields stay nil. Unsupported fields are never sent.
+    private func buildEdits() -> TagFields? {
+        var edits = TagFields()
+        var yearValue: Int?
+        var trackValue: Int?
+
+        if isBatch {
+            if capabilities.canWrite {
+                edits.title = trimmedOrNil(title)
+                edits.artist = trimmedOrNil(artist)
+                edits.album = trimmedOrNil(album)
+                edits.genre = trimmedOrNil(genre)
+                if let parsed = parseNumber(year, label: "年份", range: 1...9999) {
+                    guard let value = parsed.value else {
+                        errorMessage = parsed.error
+                        return nil
+                    }
+                    yearValue = value
+                }
+                if let parsed = parseNumber(trackNumber, label: "曲目号", range: 1...65535) {
+                    guard let value = parsed.value else {
+                        errorMessage = parsed.error
+                        return nil
+                    }
+                    trackValue = value
+                }
+            }
+            if canEditAlbumArtist {
+                edits.albumArtist = trimmedOrNil(albumArtist)
+            }
+        } else {
+            let initial = initialFields ?? TagFields()
+            if capabilities.canWrite {
+                edits.title = changedText(title, initial.title)
+                edits.artist = changedText(artist, initial.artist)
+                edits.album = changedText(album, initial.album)
+                edits.genre = changedText(genre, initial.genre)
+                switch changedNumber(year, initial: initial.year, label: "年份", range: 1...9999) {
+                case .unchanged: break
+                case .value(let value): yearValue = value
+                case .invalid(let message): errorMessage = message; return nil
+                }
+                switch changedNumber(
+                    trackNumber,
+                    initial: initial.trackNumber,
+                    label: "曲目号",
+                    range: 1...65535
+                ) {
+                case .unchanged: break
+                case .value(let value): trackValue = value
+                case .invalid(let message): errorMessage = message; return nil
+                }
+            }
+            if canEditAlbumArtist {
+                edits.albumArtist = changedText(albumArtist, initial.albumArtist)
+            }
+        }
+
+        edits.year = yearValue
+        edits.trackNumber = trackValue
+        if capabilities.canWriteArtwork {
+            edits.artworkBase64 = artworkEdit
+        }
+        return edits
+    }
+
     private func trimmedOrNil(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// nil when unchanged, "" when the user cleared a value that existed.
+    private func changedText(_ text: String, _ initial: String?) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let initialTrimmed = (initial ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == initialTrimmed ? nil : trimmed
+    }
+
+    private enum NumberEdit {
+        case unchanged
+        case value(Int)
+        case invalid(String)
+    }
+
+    private func changedNumber(
+        _ text: String,
+        initial: Int?,
+        label: String,
+        range: ClosedRange<Int>
+    ) -> NumberEdit {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            // An emptied field clears an existing number, but a field that was
+            // already blank stays untouched.
+            return initial == nil ? .unchanged : .value(0)
+        }
+        guard let value = Int(trimmed), range.contains(value) else {
+            return .invalid("\(label)必须是 \(range.lowerBound)–\(range.upperBound) 之间的整数。")
+        }
+        return value == initial ? .unchanged : .value(value)
     }
 
     /// Returns nil when the field is blank (leave unchanged), otherwise a

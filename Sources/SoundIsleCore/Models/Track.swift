@@ -82,4 +82,30 @@ public enum TrackFactory {
             artworkFileName: nil
         )
     }
+
+    /// Rebuilds a row after a tag edit, keeping `make(url:metadata:)`'s filename
+    /// fallbacks. Without this, an untagged `Artist - Title.mp3` would lose the
+    /// artist/track number the scanner inferred from its filename, and undoing
+    /// a title edit would leave the removed title in the list.
+    public static func applying(_ fields: TagFields, to track: Track) -> Track {
+        let parsed = FilenameParser.parse(filename: track.url.lastPathComponent)
+        let stem = (track.url.lastPathComponent as NSString).deletingPathExtension
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        func clean(_ value: String?) -> String? {
+            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !trimmed.isEmpty else { return nil }
+            return trimmed
+        }
+
+        var updated = track
+        updated.title = clean(fields.title) ?? clean(parsed.title) ?? stem
+        updated.artist = clean(fields.artist) ?? parsed.artist ?? ""
+        updated.album = clean(fields.album) ?? ""
+        updated.albumArtist = clean(fields.albumArtist)
+        updated.year = fields.year
+        updated.trackNumber = fields.trackNumber ?? parsed.trackNumber
+        updated.genre = clean(fields.genre)
+        return updated
+    }
 }

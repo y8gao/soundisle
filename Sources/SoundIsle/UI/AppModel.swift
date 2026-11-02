@@ -278,21 +278,28 @@ final class AppModel: ObservableObject {
 
     var canUndoTagEdit: Bool { tagUndoCount > 0 }
 
-    func clearTagUndoHistory() {
+    @discardableResult
+    func clearTagUndoHistory() -> String {
         do {
             try tagUndoStore.clear()
             tagUndoCount = 0
-            statusMessage = "已清空编辑撤销记录。"
+            let message = "已清空编辑撤销记录。"
+            statusMessage = message
+            return message
         } catch {
-            statusMessage = "清空编辑撤销记录失败：\(error.localizedDescription)"
+            let message = "清空编辑撤销记录失败：\(error.localizedDescription)"
+            statusMessage = message
+            return message
         }
     }
 
-    func undoLastTagEdit() {
+    @discardableResult
+    func undoLastTagEdit() -> String {
         do {
             guard let entry = try tagUndoStore.undoLast() else {
-                statusMessage = "没有可撤销的标签编辑。"
-                return
+                let message = "没有可撤销的标签编辑。"
+                statusMessage = message
+                return message
             }
             tagUndoCount = tagUndoStore.entries.count
             updateIndex(
@@ -301,10 +308,14 @@ final class AppModel: ObservableObject {
                 artworkChanged: entry.before.artworkBase64 != entry.after.artworkBase64
             )
             refreshFromLibrary()
-            statusMessage = "已撤销对《\(entry.url.lastPathComponent)》的标签编辑。"
+            let message = "已撤销对《\(entry.url.lastPathComponent)》的标签编辑。"
+            statusMessage = message
+            return message
         } catch {
             tagUndoCount = tagUndoStore.entries.count
-            statusMessage = "撤销失败：\(error.localizedDescription)"
+            let message = "撤销失败：\(error.localizedDescription)"
+            statusMessage = message
+            return message
         }
     }
 
@@ -385,16 +396,9 @@ final class AppModel: ObservableObject {
             $0.url.standardizedFileURL == standardized
         }) else { return }
 
-        var updated = track
-        if let title = fields.title, !title.isEmpty {
-            updated.title = title
-        }
-        updated.artist = fields.artist ?? ""
-        updated.album = fields.album ?? ""
-        updated.albumArtist = fields.albumArtist
-        updated.year = fields.year
-        updated.trackNumber = fields.trackNumber
-        updated.genre = fields.genre
+        var updated = TrackFactory.applying(fields, to: track)
+        // Filename fallbacks live in TrackFactory so an untagged
+        // `Artist - Title.mp3` keeps its scanned artist after an album edit.
         if artworkChanged {
             library.setArtwork(
                 fields.artworkBase64.flatMap { Data(base64Encoded: $0) },

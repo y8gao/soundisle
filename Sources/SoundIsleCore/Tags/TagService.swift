@@ -138,6 +138,29 @@ public struct TagFormatCapabilities: Equatable {
         }
     }
 
+    /// Combines the capabilities of a multi-selection. A field is writable
+    /// only when every file supports it. The explanation prefers a reason that
+    /// blocks writing entirely over a field-level limitation.
+    public static func combined(for urls: [URL]) -> TagFormatCapabilities {
+        urls.reduce(TagFormatCapabilities()) { partial, url in
+            let next = capabilities(for: url)
+            let limitation: String?
+            if !next.canWrite {
+                limitation = next.limitation ?? partial.limitation
+            } else if !partial.canWrite {
+                limitation = partial.limitation ?? next.limitation
+            } else {
+                limitation = partial.limitation ?? next.limitation
+            }
+            return TagFormatCapabilities(
+                canWrite: partial.canWrite && next.canWrite,
+                canWriteAlbumArtist: partial.canWriteAlbumArtist && next.canWriteAlbumArtist,
+                canWriteArtwork: partial.canWriteArtwork && next.canWriteArtwork,
+                limitation: limitation
+            )
+        }
+    }
+
     /// Walks the RIFF chunk list looking for an `id3 ` chunk. Reads only the
     /// chunk headers, never the audio payload.
     private static func wavHasID3Chunk(_ url: URL) -> Bool {

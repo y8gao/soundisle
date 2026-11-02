@@ -125,6 +125,23 @@ final class TagEditUndoStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.entries.map(\.after.title), ["二", "三"])
     }
 
+    func testReloadClampsToDefaultLimit() throws {
+        let directory = tempDir.appendingPathComponent("undo")
+        let writer = TagEditUndoStore(directory: directory, limit: 80)
+        for index in 0..<60 {
+            let url = tempDir.appendingPathComponent("track-\(index).mp3")
+            try writer.record(
+                entry(url, before: TagFields(title: "before-\(index)"), after: TagFields(title: "after-\(index)"))
+            )
+        }
+
+        // Reopening with the production default must keep only the newest 50.
+        let reloaded = TagEditUndoStore(directory: directory)
+        XCTAssertEqual(reloaded.entries.count, 50)
+        XCTAssertEqual(reloaded.entries.first?.url.lastPathComponent, "track-10.mp3")
+        XCTAssertEqual(reloaded.entries.last?.url.lastPathComponent, "track-59.mp3")
+    }
+
     func testClearEmptiesPersistedEntries() throws {
         let directory = tempDir.appendingPathComponent("undo")
         let url = tempDir.appendingPathComponent("a.mp3")

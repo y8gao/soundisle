@@ -36,7 +36,7 @@ public final class TagEditUndoStore {
         self.manager = manager
         self.service = TagService()
         try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        entries = Self.load(from: fileURL, manager: manager)
+        entries = Self.load(from: fileURL, limit: self.limit, manager: manager)
     }
 
     private var fileURL: URL {
@@ -90,12 +90,13 @@ public final class TagEditUndoStore {
         return payload
     }
 
-    private static func load(from url: URL, manager: FileManager) -> [TagUndoEntry] {
+    private static func load(from url: URL, limit: Int, manager: FileManager) -> [TagUndoEntry] {
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode([TagUndoEntry].self, from: data) else {
             return []
         }
-        return decoded
+        // A store written with a larger limit must not exceed this one.
+        return Array(decoded.suffix(max(limit, 1)))
     }
 
     private static func save(_ entries: [TagUndoEntry], to url: URL, manager: FileManager) throws {

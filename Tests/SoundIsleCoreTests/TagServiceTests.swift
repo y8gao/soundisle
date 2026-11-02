@@ -166,6 +166,41 @@ final class TagServiceTests: XCTestCase {
         XCTAssertNotNil(unknown.limitation)
     }
 
+    func testCombinedCapabilitiesPreferBlockingReason() throws {
+        let readOnlyWAV = try makeWAV(withID3: false)
+        let mp3 = URL(fileURLWithPath: "/tmp/a.mp3")
+        let combined = TagFormatCapabilities.combined(for: [readOnlyWAV, mp3])
+        XCTAssertFalse(combined.canWrite)
+        XCTAssertNotNil(combined.limitation)
+
+        // A file that cannot be written at all wins over a field limitation.
+        let asf = URL(fileURLWithPath: "/tmp/a.wma")
+        let unknown = URL(fileURLWithPath: "/tmp/a.xyz")
+        let blocked = TagFormatCapabilities.combined(for: [asf, unknown])
+        XCTAssertFalse(blocked.canWrite)
+        XCTAssertEqual(
+            blocked.limitation,
+            TagFormatCapabilities.capabilities(for: unknown).limitation
+        )
+
+        let limited = TagFormatCapabilities.combined(for: [asf, mp3])
+        XCTAssertTrue(limited.canWrite)
+        XCTAssertFalse(limited.canWriteAlbumArtist)
+        XCTAssertFalse(limited.canWriteArtwork)
+        XCTAssertNotNil(limited.limitation)
+    }
+
+    func testEmptyStringClearsTextField() throws {
+        let url = try makeMP3Fixture(withID3v1: true)
+        let service = TagService()
+        try service.write(TagFields(title: "有标题"), to: url)
+        XCTAssertEqual(service.read(from: url)?.title, "有标题")
+
+        // The single-track editor relies on "" meaning "clear", unlike nil.
+        try service.write(TagFields(title: ""), to: url)
+        XCTAssertNil(service.read(from: url)?.title)
+    }
+
     func testWriteToNonAudioFileThrows() throws {
         let url = try temporaryFile(named: "not-audio.mp3")
         XCTAssertThrowsError(try TagService().write(TagFields(title: "x"), to: url))

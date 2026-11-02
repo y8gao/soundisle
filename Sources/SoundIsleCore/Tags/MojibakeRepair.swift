@@ -12,56 +12,66 @@ public enum MojibakeRepair {
     )
 
     /// Returns the repaired text when a UTF-8 or GB18030 decode contains more
-    /// Han characters than the input; `nil` when the input is not Latin-1
+    /// Chinese characters than the input; `nil` when the input is not Latin-1
     /// mojibake or no candidate improves on it.
     public static func repaired(_ text: String) -> String? {
         let scalars = text.unicodeScalars
         guard !scalars.isEmpty else { return nil }
         // Real Chinese text is already above U+00FF and needs no repair.
         guard scalars.allSatisfy({ $0.value <= 0xFF }) else { return nil }
-        // Mis-decoded CJK never contains ASCII letters: UTF-8/GBK Chinese bytes
-        // are all >= 0x80. Plain Latin words with accents ("Mötley Crüe") do,
-        // and GB18030 would otherwise "decode" them into accidental Han text.
-        guard !scalars.contains(where: { isASCIILetter($0) }) else { return nil }
 
         let bytes = Data(scalars.map { UInt8($0.value) })
-        let originalRatio = hanRatio(text)
+        let originalRatio = chineseRatio(text)
+        let originalASCII = asciiOnly(text)
+        var best: (text: String, ratio: Double)?
 
-        // Try UTF-8 first: a valid UTF-8 decode containing Han is an
-        // unambiguous signal. GB18030 accepts almost any high-byte pair and
-        // can produce *more* accidental Han characters ("姣嶄翰" for the UTF-8
-        // bytes of 母亲), so comparing raw ratios would pick the wrong one.
+        // Both candidates are scored so a GB18030 mis-decode wins when UTF-8
+        // only yields Latin letters. Candidates must keep every ASCII run
+        // intact: GB18030 consumes ASCII bytes as trail bytes for some pairs,
+        // which is how accidental "Han" text is told apart from real text.
         for candidate in [String(data: bytes, encoding: .utf8),
                           String(data: bytes, encoding: gb18030)] {
-            guard let candidate else { continue }
-            let ratio = hanRatio(candidate)
-            if ratio > originalRatio, ratio > 0 {
-                return candidate
+            guard let candidate, asciiOnly(candidate) == originalASCII else { continue }
+            let ratio = chineseRatio(candidate)
+            guard ratio > originalRatio else { continue }
+            if best == nil || ratio > best!.ratio {
+                best = (candidate, ratio)
             }
         }
-        return nil
+        return best?.text
     }
 
-    private static func isASCIILetter(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.value {
-        case 0x41...0x5A, 0x61...0x7A: return true
-        default: return false
+    /// ASCII characters that survived the decode, used to reject candidates
+    /// that ate English words or punctuation.
+    private static func asciiOnly(_ text: String) -> String {
+        var result = ""
+        for scalar in text.unicodeScalars where scalar.value < 0x80 {
+            result.unicodeScalars.append(scalar)
         }
+        return result
     }
 
-    private static func hanRatio(_ text: String) -> Double {
-        let scalars = text.unicodeScalars
-        guard !scalars.isEmpty else { return 0 }
-        let han = scalars.filter(isHan).count
-        return Double(han) / Double(scalars.count)
+    /// Chinese characters divided by non-ASCII characters. ASCII text is
+    /// ignored so appending "(Live)" or "feat. X" cannot change the score.
+    private static func chineseRatio(_ text: String) -> Double {
+        var chinese = 0
+        var nonASCII = 0
+        for scalar in text.unicodeScalars where scalar.value >= 0x80 {
+            nonASCII += 1
+            if isChinese(scalar) { chinese += 1 }
+        }
+        return nonASCII == 0 ? 0 : Double(chinese) / Double(nonASCII)
     }
 
-    private static func isHan(_ scalar: Unicode.Scalar) -> Bool {
+    private static func isChinese(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3400...0x4DBF,   // CJK Extension A
              0x4E00...0x9FFF,   // CJK Unified Ideographs
              0xF900...0xFAFF,   // CJK Compatibility Ideographs
-             0x20000...0x2FA1F: // Extensions B-F
+             0x20000...0x2FA1F, // Extensions B-F
+             0x3000...0x303F,   // CJK punctuation
+             0xFE30...0xFE4F,   // CJK compatibility forms
+             0xFF00...0xFFEF:   // Fullwidth forms
             return true
         default:
             return false
