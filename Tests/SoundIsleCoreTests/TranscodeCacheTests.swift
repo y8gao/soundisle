@@ -179,6 +179,76 @@ final class TranscodeCacheTests: XCTestCase {
         XCTAssertGreaterThan(audio.length, 0)
     }
 
+    func testPromotingTheRunningJobDoesNotWedgeQueue() async throws {
+        let log = tempDir.appendingPathComponent("promote.log")
+        let ffmpeg = try makeOrderingFFmpeg(log: log)
+        let running = makeTrack(name: "01-slow.ape")
+        let next = makeTrack(name: "02-next.ape")
+        let queue = TranscodeQueue(cacheRoot: cacheRoot, ffmpeg: ffmpeg)
+
+        queue.enqueue(running, priority: false)
+        try await waitUntil { self.logLines(log).contains("01-slow.ape") }
+
+        // Clicking the track that is already being transcoded promotes the
+        // running job; that must not leave a stale priority entry behind.
+        async let promoted = queue.ensureCached(running)
+        queue.enqueue(next, priority: false)
+        _ = try await promoted
+
+        try await waitUntil(timeout: 3) { queue.cachedURL(for: next) != nil }
+        XCTAssertNotNil(queue.cachedURL(for: next), "queue stopped after promoting the active job")
+        XCTAssertFalse(queue.isProcessing)
+    }
+
+    func testFFmpegReceivesExpectedArguments() async throws {
+        let log = tempDir.appendingPathComponent("args.log")
+        let ffmpeg = try makeArgumentLoggingFFmpeg(log: log)
+        let track = makeTrack(name: "参数.ape")
+        let queue = TranscodeQueue(cacheRoot: cacheRoot, ffmpeg: ffmpeg)
+
+        let cached = try await queue.ensureCached(track)
+        let temporary = cached.appendingPathExtension("tmp.m4a").path
+        XCTAssertEqual(
+            logLines(log),
+            ["-y", "-i", track.url.path, "-vn", "-c:a", "alac", temporary]
+        )
+    }
+
+    func testClearCacheRemovesCachedFilesAndRecreatesDirectory() throws {
+        let queue = TranscodeQueue(cacheRoot: cacheRoot, ffmpeg: nil)
+        try Data([1]).write(to: cacheRoot.appendingPathComponent("old.m4a"))
+
+        try queue.clearCache()
+
+        XCTAssertTrue(fm.fileExists(atPath: cacheRoot.path))
+        XCTAssertEqual(try fm.contentsOfDirectory(atPath: cacheRoot.path), [])
+    }
+
+    func testClearCacheRefusesWhileJobIsActive() async throws {
+        let log = tempDir.appendingPathComponent("clear.log")
+        let ffmpeg = try makeOrderingFFmpeg(log: log)
+        let slow = makeTrack(name: "01-slow.ape")
+        let queue = TranscodeQueue(cacheRoot: cacheRoot, ffmpeg: ffmpeg)
+
+        queue.enqueue(slow, priority: false)
+        try await waitUntil { self.logLines(log).contains("01-slow.ape") }
+
+        XCTAssertThrowsError(try queue.clearCache())
+        // The active job must still complete and its waiter must be resumed.
+        let cached = try await queue.ensureCached(slow)
+        XCTAssertTrue(fm.fileExists(atPath: cached.path))
+        XCTAssertFalse(queue.isProcessing)
+    }
+
+    func testUpdateFFmpegEnablesAnIdleQueue() async throws {
+        let ffmpeg = try makeFakeFFmpeg(named: "ffmpeg-late", log: nil)
+        let queue = TranscodeQueue(cacheRoot: cacheRoot, ffmpeg: nil)
+        queue.updateFFmpeg(ffmpeg)
+
+        let cached = try await queue.ensureCached(makeTrack(name: "迟到.ape"))
+        XCTAssertTrue(fm.fileExists(atPath: cached.path))
+    }
+
     // MARK: - Helpers
 
     private func makeTrack(
@@ -219,6 +289,19 @@ final class TranscodeCacheTests: XCTestCase {
         for out in "$@"; do :; done
         echo run >> "\(log.path)"
         cp "\(fixture.path)" "$out"
+        """
+        try script.write(to: url, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    private func makeArgumentLoggingFFmpeg(log: URL) throws -> URL {
+        let url = tempDir.appendingPathComponent("ffmpeg-args")
+        let script = """
+        #!/bin/sh
+        for arg in "$@"; do echo "$arg" >> "\(log.path)"; done
+        for out in "$@"; do :; done
+        printf 'fake-m4a' > "$out"
         """
         try script.write(to: url, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)

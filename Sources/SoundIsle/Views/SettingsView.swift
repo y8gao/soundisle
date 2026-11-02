@@ -11,17 +11,25 @@ struct SettingsView: View {
     @State private var notice: String?
     @State private var cacheNotice: String?
 
-    private struct Section {
+    private enum SectionID: Hashable {
+        case folders
+        case cache
+        case lyrics
+        case appearance
+    }
+
+    private struct Section: Identifiable {
+        let id: SectionID
         let title: String
         let subtitle: String
         let icon: Image
     }
 
     private let sections = [
-        Section(title: "音乐文件夹", subtitle: "导入目录、重新扫描与缺失文件", icon: Icons.settingsFolders),
-        Section(title: "缓存", subtitle: "转码缓存占用与 FFmpeg 路径", icon: Icons.settingsCache),
-        Section(title: "歌词", subtitle: "桌面歌词与在线歌词来源", icon: Icons.settingsLyrics),
-        Section(title: "外观", subtitle: "主题皮肤、明暗模式与透明度", icon: Icons.settingsAppearance),
+        Section(id: .folders, title: "音乐文件夹", subtitle: "导入目录、重新扫描与缺失文件", icon: Icons.settingsFolders),
+        Section(id: .cache, title: "缓存", subtitle: "转码缓存占用与 FFmpeg 路径", icon: Icons.settingsCache),
+        Section(id: .lyrics, title: "歌词", subtitle: "桌面歌词与在线歌词来源", icon: Icons.settingsLyrics),
+        Section(id: .appearance, title: "外观", subtitle: "主题皮肤、明暗模式与透明度", icon: Icons.settingsAppearance),
     ]
 
     var body: some View {
@@ -47,9 +55,8 @@ struct SettingsView: View {
                 VStack(spacing: 10) {
                     tagEditingSection
 
-                    ForEach(sections.indices, id: \.self) { index in
-                        let section = sections[index]
-                        if section.title == "缓存" {
+                    ForEach(sections) { section in
+                        if section.id == .cache {
                             cacheSection
                         } else {
                             HStack(spacing: 13) {

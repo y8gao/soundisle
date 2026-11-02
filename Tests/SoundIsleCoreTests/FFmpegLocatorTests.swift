@@ -49,7 +49,23 @@ final class FFmpegLocatorTests: XCTestCase {
         XCTAssertEqual(FFprobeReader.duration(of: sample, ffmpeg: ffmpeg), 12.5)
     }
 
-    func testFFprobeReaderReturnsNilWithoutSibling() throws {
+    func testFFprobeFallsBackToSystemSearchWhenSiblingMissing() throws {
+        let ffmpeg = try makeExecutable(named: "ffmpeg-lone")
+        let bin = tempDir.appendingPathComponent("bin", isDirectory: true)
+        try fm.createDirectory(at: bin, withIntermediateDirectories: true)
+        let ffprobe = bin.appendingPathComponent("ffprobe")
+        try "#!/bin/sh\necho 12.5\n".write(to: ffprobe, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffprobe.path)
+
+        let found = FFmpegLocator.ffprobe(
+            for: ffmpeg,
+            environment: ["PATH": bin.path],
+            fixedDirectories: []
+        )
+        XCTAssertEqual(found?.standardizedFileURL, ffprobe.standardizedFileURL)
+    }
+
+    func testFFprobeReaderReturnsNilForUnreadableSample() throws {
         let ffmpeg = try makeExecutable(named: "ffmpeg-alone")
         let sample = tempDir.appendingPathComponent("sample.ape")
         try Data().write(to: sample)

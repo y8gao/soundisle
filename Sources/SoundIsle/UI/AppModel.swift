@@ -823,13 +823,10 @@ final class AppModel: ObservableObject {
             url = transcode.cachedURL(for: track)
         }
         guard let url else {
-            _ = startTrack(track)
+            _ = startTrack(track, startAt: position)
             return
         }
-        guard loadAndPlay(track, url: url) else { return }
-        if position > 0 {
-            engine.seek(to: position)
-        }
+        guard loadAndPlay(track, url: url, startAt: position) else { return }
         restoredPosition = 0
     }
 
@@ -886,8 +883,9 @@ final class AppModel: ObservableObject {
     /// Starts a track, routing fallback formats through the transcode cache.
     /// Returns true when the track was accepted, including the asynchronous
     /// "preparing" case, so `next()`/`previous()` do not skip past it.
+    /// `startAt` carries a restored position through the async preparation.
     @discardableResult
-    private func startTrack(_ track: Track) -> Bool {
+    private func startTrack(_ track: Track, startAt: TimeInterval = 0) -> Bool {
         guard !track.isMissing else {
             statusMessage = "《\(track.title)》文件缺失，已跳过。"
             return false
@@ -896,12 +894,12 @@ final class AppModel: ObservableObject {
         if AudioFormatSupport.isNative(track.url) {
             showsFFmpegInstallPrompt = false
             pendingTranscodeTrack = nil
-            return loadAndPlay(track, url: track.url)
+            return loadAndPlay(track, url: track.url, startAt: startAt)
         }
         if let cached = transcode.cachedURL(for: track) {
             showsFFmpegInstallPrompt = false
             pendingTranscodeTrack = nil
-            return loadAndPlay(track, url: cached)
+            return loadAndPlay(track, url: cached, startAt: startAt)
         }
         guard let ffmpeg = FFmpegLocator.find(customPath: library.settings.ffmpegPath) else {
             // Leave the current song alone: a missing dependency must never
@@ -915,7 +913,7 @@ final class AppModel: ObservableObject {
         transcode.updateFFmpeg(ffmpeg)
         engine.unload()
         currentTrack = track
-        restoredPosition = 0
+        restoredPosition = startAt
         showsFFmpegInstallPrompt = false
         statusMessage = "正在准备《\(track.title)》…"
         preparingTrackID = track.id
@@ -927,7 +925,7 @@ final class AppModel: ObservableObject {
                 guard self.preparingTrackID == track.id,
                       self.currentTrack?.id == track.id else { return }
                 self.preparingTrackID = nil
-                _ = self.loadAndPlay(track, url: url)
+                _ = self.loadAndPlay(track, url: url, startAt: startAt)
             } catch {
                 guard self.preparingTrackID == track.id else { return }
                 self.preparingTrackID = nil
@@ -943,13 +941,22 @@ final class AppModel: ObservableObject {
         return true
     }
 
-    private func loadAndPlay(_ track: Track, url: URL) -> Bool {
+    /// Loads `url`, optionally seeks while paused, then starts playback so a
+    /// restored position never plays a fragment from the start of the song.
+    private func loadAndPlay(
+        _ track: Track,
+        url: URL,
+        startAt: TimeInterval = 0
+    ) -> Bool {
         preparingTrackID = nil
         do {
             try engine.load(url: url)
         } catch {
             statusMessage = "无法播放《\(track.title)》：\(engine.lastError ?? "未知错误")"
             return false
+        }
+        if startAt > 0 {
+            engine.seek(to: startAt)
         }
         currentTrack = track
         restoredPosition = 0
@@ -993,20 +1000,18 @@ final class AppModel: ObservableObject {
     @discardableResult
     func clearTranscodeCache() -> String {
         let message: String
-        if transcode.isProcessing {
-            message = "正在准备歌曲，请稍后再清理缓存。"
-        } else {
+        do {
             let freed = TranscodeCache.directorySize(transcodeRoot)
-            do {
-                try transcode.clearCache()
-                refreshTranscodeCacheSize()
-                let size = freed > 0
-                    ? ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
-                    : "0 MB"
-                message = "已清理转码缓存（\(size)）。"
-            } catch {
-                message = "清理转码缓存失败：\(error.localizedDescription)"
-            }
+            try transcode.clearCache()
+            refreshTranscodeCacheSize()
+            let size = freed > 0
+                ? ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+                : "0 MB"
+            message = "已清理转码缓存（\(size)）。"
+        } catch let transcodeError as TranscodeError {
+            message = transcodeError.localizedDescription
+        } catch {
+            message = "清理转码缓存失败：\(error.localizedDescription)"
         }
         statusMessage = message
         return message
@@ -1070,7 +1075,7 @@ final class AppModel: ObservableObject {
     private func retryPendingTranscode() {
         guard let track = pendingTranscodeTrack else { return }
         pendingTranscodeTrack = nil
-        _ = startTrack(track)
+        _ = startTrack(track, startAt: restoredPosition)
     }
 
     /// After a scan: fill durations for fallback formats and transcode them in

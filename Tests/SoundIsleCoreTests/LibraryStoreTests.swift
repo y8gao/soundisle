@@ -129,6 +129,23 @@ final class LibraryStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testUpdateDurationsFillsOnlyUnknownDurationsAndPersists() throws {
+        let store = LibraryStore(directory: dataDir)
+        var known = sampleTrack()
+        known.duration = 12
+        var unknown = sampleTrack()
+        unknown.duration = 0
+        store.index.tracks = [known, unknown]
+
+        store.updateDurations([known.id: 99, unknown.id: 42.5])
+
+        XCTAssertEqual(store.index.tracks[0].duration, 12)
+        XCTAssertEqual(store.index.tracks[1].duration, 42.5)
+        let reloaded = IndexStore(directory: dataDir).loadIndex()
+        XCTAssertEqual(reloaded.tracks.first(where: { $0.id == unknown.id })?.duration, 42.5)
+    }
+
+    @MainActor
     func testLibraryStoreSavesSettingsThroughItsOwnStore() async throws {
         let store = LibraryStore(directory: dataDir)
         store.settings.lastTrackID = UUID()

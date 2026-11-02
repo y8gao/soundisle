@@ -103,23 +103,32 @@ public final class TranscodeQueue {
         let key = cacheKey(track)
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
-            let job: Job
-            if let existing = jobs[key] {
-                job = existing
+            if let job = jobs[key] {
+                job.waiters.append(continuation)
+                promoteLocked(key, job: job)
             } else {
-                job = Job(track: track)
+                let job = Job(track: track)
+                job.isPriority = true
+                job.waiters.append(continuation)
                 jobs[key] = job
                 priorityKeys.append(key)
             }
-            job.waiters.append(continuation)
-            promoteLocked(key, job: job)
             lock.unlock()
 
             startNextIfIdle()
         }
     }
 
+    /// Refused while any job (running or queued) exists; holds the same lock
+    /// the worker uses so a job cannot become active between the check and the
+    /// deletion.
     public func clearCache() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        guard activeKey == nil, jobs.isEmpty else {
+            throw TranscodeError.failed("正在准备歌曲，请稍后再清理缓存。")
+        }
+
         let manager = FileManager.default
         if manager.fileExists(atPath: cacheRoot.path) {
             try manager.removeItem(at: cacheRoot)
@@ -133,6 +142,9 @@ public final class TranscodeQueue {
         guard !job.isPriority else { return }
         job.isPriority = true
         backgroundKeys.removeAll { $0 == key }
+        // The active job was already removed from both key lists; appending it
+        // again would leave a key with no `jobs` entry and wedge the worker.
+        guard activeKey != key else { return }
         priorityKeys.append(key)
     }
 
@@ -141,6 +153,13 @@ public final class TranscodeQueue {
         guard activeKey == nil else {
             lock.unlock()
             return
+        }
+        // Defensive: never let a stale key hide a real queued job.
+        while let first = priorityKeys.first, jobs[first] == nil {
+            priorityKeys.removeFirst()
+        }
+        while let first = backgroundKeys.first, jobs[first] == nil {
+            backgroundKeys.removeFirst()
         }
         let key = priorityKeys.first ?? backgroundKeys.first
         guard let key, let job = jobs[key] else {
