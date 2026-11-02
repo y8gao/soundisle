@@ -3,88 +3,24 @@ import SoundIsleCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - Theme
-
-/// Deep-space blue, dark skin. Task 14 replaces this with real theme presets.
-enum Theme {
-    static let text = Color(red: 237 / 255, green: 240 / 255, blue: 250 / 255)
-    static let accent = Color(red: 122 / 255, green: 162 / 255, blue: 255 / 255)
-    static let accentLight = Color(red: 205 / 255, green: 221 / 255, blue: 255 / 255)
-    static let warning = Color(red: 255 / 255, green: 183 / 255, blue: 102 / 255)
-    static let panelTint = Color(red: 20 / 255, green: 24 / 255, blue: 36 / 255)
-    static let playerTint = Color(red: 10 / 255, green: 13 / 255, blue: 22 / 255)
-
-    static let accentGradient = LinearGradient(
-        colors: [accent, Color(red: 181 / 255, green: 140 / 255, blue: 255 / 255)],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-
-    static let coverGradient = LinearGradient(
-        colors: [
-            Color(red: 77 / 255, green: 107 / 255, blue: 216 / 255),
-            Color(red: 143 / 255, green: 91 / 255, blue: 217 / 255),
-            Color(red: 196 / 255, green: 91 / 255, blue: 142 / 255),
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-}
-
-struct AppBackground: View {
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 18 / 255, green: 21 / 255, blue: 33 / 255),
-                    Color(red: 27 / 255, green: 33 / 255, blue: 50 / 255),
-                    Color(red: 22 / 255, green: 27 / 255, blue: 40 / 255),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            RadialGradient(
-                colors: [Color(red: 88 / 255, green: 122 / 255, blue: 255 / 255).opacity(0.42), .clear],
-                center: UnitPoint(x: 0.12, y: 0.05),
-                startRadius: 0,
-                endRadius: 480
-            )
-            RadialGradient(
-                colors: [Color(red: 214 / 255, green: 96 / 255, blue: 168 / 255).opacity(0.24), .clear],
-                center: UnitPoint(x: 0.88, y: 0.22),
-                startRadius: 0,
-                endRadius: 420
-            )
-            RadialGradient(
-                colors: [Color(red: 45 / 255, green: 190 / 255, blue: 160 / 255).opacity(0.20), .clear],
-                center: UnitPoint(x: 0.55, y: 1.05),
-                startRadius: 0,
-                endRadius: 520
-            )
-        }
-        .ignoresSafeArea()
-    }
-}
-
-extension View {
-    /// Frosted panel: material blurs what is behind, a translucent tint gives
-    /// the deep-blue cast, and a hairline border catches the light.
-    func glassPanel(cornerRadius: CGFloat = 12) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        return self
-            .background(Theme.panelTint.opacity(0.55), in: shape)
-            .background(.ultraThinMaterial, in: shape)
-            .overlay(shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5))
-    }
-}
-
 // MARK: - Main window
 
 struct MainWindowView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
 
     @FocusState private var searchFocused: Bool
     @State private var isDropTargeted = false
+
+    private var palette: ThemePalette {
+        let settings = model.library.settings
+        return ThemePalette.resolve(
+            preset: settings.preset,
+            mode: settings.mode,
+            customAccentHex: settings.customAccentHex,
+            systemIsDark: colorScheme == .dark
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -99,12 +35,12 @@ struct MainWindowView: View {
                 .frame(height: 76)
         }
         .background(AppBackground())
+        .soundIsleTheme(palette)
         .overlay(dropOverlay)
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers)
             return true
         }
-        .preferredColorScheme(.dark)
         .background(WindowConfigurator(model: model))
         .onAppear { model.start() }
         .onChange(of: model.searchFocusRequest) { _ in
@@ -146,32 +82,32 @@ struct MainWindowView: View {
             HStack(spacing: 12) {
                 Text("声屿")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Theme.text.opacity(0.8))
+                    .foregroundColor(palette.text.opacity(0.8))
 
                 Spacer(minLength: 12)
 
                 HStack(spacing: 6) {
                     Icons.search
-                        .foregroundColor(Theme.text.opacity(0.45))
+                        .foregroundColor(palette.text.opacity(0.45))
                     TextField("搜索歌曲、歌手、专辑", text: $model.searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
-                        .foregroundColor(Theme.text)
+                        .foregroundColor(palette.text)
                         .focused($searchFocused)
                 }
                 .padding(.horizontal, 9)
                 .frame(width: 220, height: 26)
-                .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .background(palette.raisedFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(palette.hairline, lineWidth: 0.5)
                 )
 
                 Button {
                     model.isSettingsPresented = true
                 } label: {
                     Icons.settings
-                        .foregroundColor(Theme.text.opacity(0.7))
+                        .foregroundColor(palette.text.opacity(0.7))
                         .frame(width: 26, height: 26)
                         .contentShape(Rectangle())
                 }
@@ -183,10 +119,10 @@ struct MainWindowView: View {
         .padding(.leading, 78)
         .padding(.trailing, 16)
         .frame(height: 46)
-        .background(Color.white.opacity(0.015))
+        .background(palette.raisedFill.opacity(0.24))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color.white.opacity(0.06))
+                .fill(palette.hairline)
                 .frame(height: 1)
         }
     }
@@ -195,16 +131,16 @@ struct MainWindowView: View {
     private var dropOverlay: some View {
         if isDropTargeted {
             ZStack {
-                Theme.playerTint.opacity(0.55).ignoresSafeArea()
+                palette.playerTint.opacity(0.55).ignoresSafeArea()
                 VStack(spacing: 10) {
                     Icons.dropImport
-                        .foregroundColor(Theme.accent)
+                        .foregroundColor(palette.accent)
                     Text("松开以导入")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(Theme.text)
+                        .foregroundColor(palette.text)
                     Text("文件夹会递归扫描，单个文件会导入所在文件夹")
                         .font(.system(size: 11))
-                        .foregroundColor(Theme.text.opacity(0.55))
+                        .foregroundColor(palette.text.opacity(0.55))
                 }
                 .padding(.horizontal, 30)
                 .padding(.vertical, 24)
@@ -333,12 +269,8 @@ private struct WindowConfigurator: NSViewRepresentable {
             // dragging swallowed those gestures. The top bar carries its own
             // drag area instead.
             window.isMovableByWindowBackground = false
-            window.backgroundColor = NSColor(
-                calibratedRed: 18 / 255,
-                green: 21 / 255,
-                blue: 33 / 255,
-                alpha: 1
-            )
+            // Follows the effective NSApp appearance chosen by the theme mode.
+            window.backgroundColor = .windowBackgroundColor
             window.minSize = NSSize(width: 900, height: 600)
             window.setContentSize(NSSize(width: 900, height: 600))
             window.center()

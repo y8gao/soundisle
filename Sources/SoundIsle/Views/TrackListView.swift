@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 struct TrackListView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.theme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,11 +86,11 @@ struct TrackListView: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(title)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(Theme.text)
+                .foregroundColor(theme.text)
                 .lineLimit(1)
             Text(meta)
                 .font(.system(size: 11.5))
-                .foregroundColor(Theme.text.opacity(0.5))
+                .foregroundColor(theme.text.opacity(0.5))
                 .lineLimit(1)
 
             Spacer(minLength: 12)
@@ -102,7 +103,7 @@ struct TrackListView: View {
                         .frame(width: 12, height: 12)
                     Text("扫描中…")
                         .font(.system(size: 10.5))
-                        .foregroundColor(Theme.text.opacity(0.5))
+                        .foregroundColor(theme.text.opacity(0.5))
                 }
             }
 
@@ -110,7 +111,7 @@ struct TrackListView: View {
                 Task { await model.rescan() }
             } label: {
                 Icons.refresh
-                    .foregroundColor(Theme.text.opacity(model.folders.isEmpty ? 0.25 : 0.6))
+                    .foregroundColor(theme.text.opacity(model.folders.isEmpty ? 0.25 : 0.6))
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
@@ -148,11 +149,11 @@ struct TrackListView: View {
                 }
             }
             .font(.system(size: 10.5, weight: active ? .semibold : .regular))
-            .foregroundColor(active ? Theme.accentLight : Theme.text.opacity(0.45))
+            .foregroundColor(active ? theme.accentLight : theme.text.opacity(0.45))
             .padding(.horizontal, 7)
             .frame(height: 22)
             .background(
-                active ? Theme.accent.opacity(0.14) : Color.clear,
+                active ? theme.accent.opacity(0.14) : Color.clear,
                 in: RoundedRectangle(cornerRadius: 5, style: .continuous)
             )
             .contentShape(Rectangle())
@@ -199,17 +200,17 @@ struct TrackListView: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Icons.warning
-                    .foregroundColor(Theme.warning)
+                    .foregroundColor(theme.warning)
                 Text(message)
                     .font(.system(size: 11.5))
-                    .foregroundColor(Theme.text.opacity(0.82))
+                    .foregroundColor(theme.text.opacity(0.82))
                     .lineLimit(2)
                 Spacer(minLength: 6)
                 Button {
                     model.dismissStatus()
                 } label: {
                     Icons.close
-                        .foregroundColor(Theme.text.opacity(0.5))
+                        .foregroundColor(theme.text.opacity(0.5))
                         .frame(width: 18, height: 18)
                         .contentShape(Rectangle())
                 }
@@ -228,23 +229,23 @@ struct TrackListView: View {
                         model.chooseFFmpegPath()
                     }
                     Text("原生格式仍可正常播放")
-                        .foregroundColor(Theme.text.opacity(0.45))
+                        .foregroundColor(theme.text.opacity(0.45))
                     Spacer(minLength: 0)
                 }
                 .font(.system(size: 10.5))
                 .buttonStyle(.plain)
-                .foregroundColor(Theme.accentLight)
+                .foregroundColor(theme.accentLight)
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 7)
         .background(
-            Theme.warning.opacity(0.12),
+            theme.warning.opacity(0.12),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Theme.warning.opacity(0.3), lineWidth: 0.5)
+                .strokeBorder(theme.warning.opacity(0.3), lineWidth: 0.5)
         )
         .padding(.horizontal, 18)
         .padding(.bottom, 6)
@@ -257,13 +258,13 @@ struct TrackListView: View {
         return VStack(spacing: 12) {
             Spacer(minLength: 0)
             Icons.emptyLibrary
-                .foregroundColor(Theme.text.opacity(0.28))
+                .foregroundColor(theme.text.opacity(0.28))
             Text(emptyTitle(searching: searching, playlistEmpty: playlistEmpty))
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(Theme.text.opacity(0.85))
+                .foregroundColor(theme.text.opacity(0.85))
             Text(emptyHint(searching: searching, playlistEmpty: playlistEmpty))
                 .font(.system(size: 12))
-                .foregroundColor(Theme.text.opacity(0.5))
+                .foregroundColor(theme.text.opacity(0.5))
                 .multilineTextAlignment(.center)
 
             Button {
@@ -277,16 +278,16 @@ struct TrackListView: View {
             } label: {
                 Text(searching ? "清空搜索" : (model.tracks.isEmpty ? "选择文件夹" : "查看全部音乐"))
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Theme.accentLight)
+                    .foregroundColor(theme.accentLight)
                     .padding(.horizontal, 16)
                     .frame(height: 30)
                     .background(
-                        Theme.accent.opacity(0.16),
+                        theme.accent.opacity(0.16),
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Theme.accent.opacity(0.35), lineWidth: 0.5)
+                            .strokeBorder(theme.accent.opacity(0.35), lineWidth: 0.5)
                     )
                     .contentShape(Rectangle())
             }
@@ -317,6 +318,7 @@ struct TrackListView: View {
 // MARK: - Row
 
 private struct TrackRow: View {
+    @Environment(\.theme) private var theme
     let track: Track
     let index: Int
     let isCurrent: Bool
@@ -344,16 +346,16 @@ private struct TrackRow: View {
                     if track.isMissing {
                         Text("文件缺失")
                             .font(.system(size: 9.5, weight: .medium))
-                            .foregroundColor(Theme.warning)
+                            .foregroundColor(theme.warning)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Theme.warning.opacity(0.14), in: Capsule())
+                            .background(theme.warning.opacity(0.14), in: Capsule())
                     }
                 }
                 if !track.artist.isEmpty {
                     Text(track.artist)
                         .font(.system(size: 10.5))
-                        .foregroundColor(Theme.text.opacity(0.5))
+                        .foregroundColor(theme.text.opacity(0.5))
                         .lineLimit(1)
                 }
             }
@@ -363,7 +365,7 @@ private struct TrackRow: View {
             Text(TimeText.string(track.duration))
                 .font(.system(size: 10.5))
                 .monospacedDigit()
-                .foregroundColor(Theme.text.opacity(0.45))
+                .foregroundColor(theme.text.opacity(0.45))
                 .frame(width: 46, alignment: .trailing)
         }
         .padding(.horizontal, 8)
@@ -385,19 +387,19 @@ private struct TrackRow: View {
             Text("\(index + 1)")
                 .font(.system(size: 10.5))
                 .monospacedDigit()
-                .foregroundColor(Theme.text.opacity(0.4))
+                .foregroundColor(theme.text.opacity(0.4))
         }
     }
 
     private var titleColor: Color {
-        if track.isMissing { return Theme.text.opacity(0.45) }
-        return isCurrent ? Theme.accentLight : Theme.text
+        if track.isMissing { return theme.text.opacity(0.45) }
+        return isCurrent ? theme.accentLight : theme.text
     }
 
     private var rowBackground: Color {
-        if isCurrent { return Theme.accent.opacity(0.13) }
-        if isSelected { return Theme.accent.opacity(0.09) }
-        if isHovering { return Color.white.opacity(0.04) }
+        if isCurrent { return theme.accent.opacity(0.13) }
+        if isSelected { return theme.accent.opacity(0.09) }
+        if isHovering { return theme.raisedFill }
         return .clear
     }
 }
@@ -405,13 +407,14 @@ private struct TrackRow: View {
 // MARK: - Cover thumbnail
 
 private struct ArtworkThumbnail: View {
+    @Environment(\.theme) private var theme
     let url: URL?
     @State private var image: NSImage?
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Theme.coverGradient)
+                .fill(theme.coverGradient)
             if let image {
                 Image(nsImage: image)
                     .resizable()
@@ -438,6 +441,7 @@ private struct ArtworkThumbnail: View {
 /// equalizer drove SwiftUI commits continuously and dominated idle playback
 /// CPU on older Macs, while a static glyph already communicates "playing".
 private struct PlayingIndicator: View {
+    @Environment(\.theme) private var theme
     let isPlaying: Bool
 
     private let heights: [CGFloat] = [5, 11, 8]
@@ -446,7 +450,7 @@ private struct PlayingIndicator: View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(0..<3, id: \.self) { bar in
                 Capsule()
-                    .fill(Theme.accent)
+                    .fill(theme.accent)
                     .frame(width: 2.5, height: isPlaying ? heights[bar] : 3)
             }
         }

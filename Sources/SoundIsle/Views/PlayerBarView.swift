@@ -22,6 +22,7 @@ enum TimeText {
 
 struct PlayerBarView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.theme) private var theme
 
     var body: some View {
         HStack(spacing: 0) {
@@ -43,13 +44,23 @@ struct PlayerBarView: View {
         }
         .padding(.horizontal, 18)
         .frame(height: 76)
-        .background(Theme.playerTint.opacity(0.42))
+        // Behind the controls, in front of the bar's material.
+        .background(alignment: .bottom) {
+            if model.library.settings.showMainSpectrum {
+                MainSpectrumView(engine: model.engine)
+                    .frame(height: 18)
+                    .padding(.horizontal, 18)
+                    .allowsHitTesting(false)
+            }
+        }
+        .background(theme.playerTint.opacity(theme.isDark ? 0.42 : 0.72))
         .background(.ultraThinMaterial)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color.white.opacity(0.09))
+                .fill(theme.hairline)
                 .frame(height: 1)
         }
+        .clipped()
     }
 
     // MARK: Left
@@ -57,7 +68,7 @@ struct PlayerBarView: View {
     private var trackInfo: some View {
         HStack(spacing: 13) {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Theme.coverGradient)
+                .fill(theme.coverGradient)
                 .frame(width: 42, height: 42)
                 .overlay {
                     Icons.coverNote
@@ -77,11 +88,11 @@ struct PlayerBarView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.currentTrack?.title ?? "未在播放")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(Theme.text)
+                    .foregroundColor(theme.text)
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 10.5))
-                    .foregroundColor(Theme.text.opacity(0.55))
+                    .foregroundColor(theme.text.opacity(0.55))
                     .lineLimit(1)
             }
         }
@@ -130,10 +141,10 @@ struct PlayerBarView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Theme.text)
+                            .fill(theme.accent)
                             .shadow(color: .black.opacity(0.28), radius: 6, y: 3)
                         (model.isPlaying ? Icons.pause : Icons.play)
-                            .foregroundColor(Color(red: 20 / 255, green: 24 / 255, blue: 38 / 255))
+                            .foregroundColor(theme.onAccent)
                     }
                     .frame(width: 38, height: 38)
                     .contentShape(Circle())
@@ -147,8 +158,9 @@ struct PlayerBarView: View {
                 .help("下一首")
             }
 
-            // Isolated so engine-driven position/spectrum updates re-render
-            // only this row, not the whole player bar.
+            // Isolated: engine position updates re-render only this row. The
+            // spectrum lives in its own view so audio-rate updates never touch
+            // the rest of the player bar.
             PlayerProgressView(model: model, engine: model.engine)
         }
     }
@@ -158,7 +170,7 @@ struct PlayerBarView: View {
     private var rightControls: some View {
         HStack(spacing: 10) {
             Icons.volume()
-                .foregroundColor(Theme.text.opacity(0.75))
+                .foregroundColor(theme.text.opacity(0.75))
 
             VolumeSlider(value: $model.volume)
                 .frame(width: 46, height: 14)
@@ -181,33 +193,74 @@ struct PlayerBarView: View {
 
 private struct PlayerProgressView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var engine: PlayerEngine
+    let engine: PlayerEngine
+    @Environment(\.theme) private var theme
+    @State private var position: TimeInterval = 0
+    @State private var duration: TimeInterval = 0
+
+    private var shownPosition: TimeInterval {
+        engine.duration > 0 ? position : model.displayPosition
+    }
+
+    private var shownDuration: TimeInterval {
+        engine.duration > 0 ? duration : model.displayDuration
+    }
 
     var body: some View {
         VStack(spacing: 2) {
             ProgressSlider(
-                value: model.displayPosition,
-                duration: model.displayDuration,
+                value: shownPosition,
+                duration: shownDuration,
                 onSeek: { model.seek(to: $0) }
             )
             .frame(width: 360, height: 14)
 
             HStack(spacing: 0) {
-                Text(TimeText.string(model.displayPosition))
+                Text(TimeText.string(shownPosition))
                 Spacer(minLength: 0)
-                Text(TimeText.string(model.displayDuration))
+                Text(TimeText.string(shownDuration))
             }
             .font(.system(size: 9.5))
             .monospacedDigit()
-            .foregroundColor(Theme.text.opacity(0.72))
+            .foregroundColor(theme.text.opacity(0.72))
             .frame(width: 360)
         }
+        // Only position/duration drive this row. Observing the whole engine
+        // would re-render it at the spectrum's ~24 fps.
+        .onReceive(engine.$position) { position = $0 }
+        .onReceive(engine.$duration) { duration = $0 }
+        .onAppear {
+            position = engine.position
+            duration = engine.duration
+        }
+    }
+}
+
+// MARK: - Main spectrum
+
+/// Faint 24-bar spectrum along the player bar. The AppKit view subscribes to
+/// the engine, so audio-rate updates redraw only this strip.
+private struct MainSpectrumView: View {
+    let engine: PlayerEngine
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        SpectrumBarsView(
+            engine: engine,
+            bottomColor: theme.accent.opacity(0.16),
+            topColor: theme.accent.opacity(0.34),
+            gap: 2,
+            minBarHeight: 1,
+            cornerRadius: 1
+        )
+        .accessibilityHidden(true)
     }
 }
 
 // MARK: - Buttons
 
 private struct PlaybackModeButton: View {
+    @Environment(\.theme) private var theme
     let icon: Image
     let help: String
     let isSelected: Bool
@@ -219,11 +272,11 @@ private struct PlaybackModeButton: View {
         Button(action: action) {
             icon
                 .foregroundColor(
-                    isSelected ? Theme.accentLight : Theme.text.opacity(isHovering ? 0.9 : 0.45)
+                    isSelected ? theme.accentLight : theme.text.opacity(isHovering ? 0.9 : 0.45)
                 )
                 .frame(width: 24, height: 24)
                 .background(
-                    isSelected ? Theme.accent.opacity(0.18) : (isHovering ? Color.white.opacity(0.06) : Color.clear),
+                    isSelected ? theme.accent.opacity(0.18) : (isHovering ? theme.raisedFill : Color.clear),
                     in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                 )
                 .contentShape(Rectangle())
@@ -235,6 +288,7 @@ private struct PlaybackModeButton: View {
 }
 
 private struct PlayerIconButton: View {
+    @Environment(\.theme) private var theme
     let icon: Image
     let size: CGFloat
     let action: () -> Void
@@ -244,10 +298,10 @@ private struct PlayerIconButton: View {
     var body: some View {
         Button(action: action) {
             icon
-                .foregroundColor(Theme.text.opacity(isHovering ? 1 : 0.86))
+                .foregroundColor(theme.text.opacity(isHovering ? 1 : 0.86))
                 .frame(width: size, height: size)
                 .background(
-                    isHovering ? Color.white.opacity(0.08) : Color.clear,
+                    isHovering ? theme.raisedFill : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                 )
                 .contentShape(Rectangle())
@@ -260,6 +314,7 @@ private struct PlayerIconButton: View {
 // MARK: - Sliders
 
 private struct ProgressSlider: View {
+    @Environment(\.theme) private var theme
     let value: Double
     let duration: Double
     let onSeek: (Double) -> Void
@@ -275,10 +330,10 @@ private struct ProgressSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(0.14))
+                    .fill(theme.sliderTrack)
                     .frame(height: 4)
                 Capsule()
-                    .fill(Theme.accentGradient)
+                    .fill(theme.accentGradient)
                     .frame(width: width * progress, height: 4)
                 Circle()
                     .fill(Color.white)
@@ -310,6 +365,7 @@ private struct ProgressSlider: View {
 }
 
 private struct VolumeSlider: View {
+    @Environment(\.theme) private var theme
     @Binding var value: Double
 
     var body: some View {
@@ -319,10 +375,10 @@ private struct VolumeSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(0.16))
+                    .fill(theme.sliderTrack)
                     .frame(height: 3)
                 Capsule()
-                    .fill(Theme.text.opacity(0.65))
+                    .fill(theme.text.opacity(0.65))
                     .frame(width: width * progress, height: 3)
             }
             .frame(maxHeight: .infinity, alignment: .center)

@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let miniPlayer = MiniPlayerWindowController(model: model)
         miniPlayer.onExpand = { [weak self] in self?.showMainWindow() }
         self.miniPlayer = miniPlayer
+        model.miniPlayer = miniPlayer
 
         let lyricsOverlay = LyricsOverlayWindowController(model: model)
         lyricsOverlay.setLocked(model.isLyricsLocked)

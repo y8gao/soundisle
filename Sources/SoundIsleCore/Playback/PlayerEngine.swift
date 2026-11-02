@@ -1,4 +1,3 @@
-import Accelerate
 import AVFoundation
 import Combine
 import Foundation
@@ -9,7 +8,7 @@ import Foundation
 /// All published state is updated on the main queue. Spectrum analysis is
 /// opt-in so normal playback pays for neither the tap nor the FFT.
 public final class PlayerEngine: ObservableObject {
-    public static let bandCount = 24
+    public static let bandCount = SpectrumAnalyzer.bandCount
 
     @Published public private(set) var isPlaying = false
     @Published public private(set) var position: TimeInterval = 0
@@ -21,30 +20,32 @@ public final class PlayerEngine: ObservableObject {
     /// Called on the main queue after the scheduled segment finishes naturally.
     public var onFinish: (() -> Void)?
 
-    /// The main window does not draw a spectrum yet, so the tap is not
-    /// installed by default. Task 14 turns this on when a spectrum view exists.
+    /// Set by the app when a spectrum view is on screen (mini window visible
+    /// or the main player bar spectrum enabled). The tap is only installed
+    /// while this is true *and* audio is playing, so paused playback costs
+    /// nothing.
     public var isSpectrumEnabled = false {
         didSet {
             guard isSpectrumEnabled != oldValue else { return }
-            if isSpectrumEnabled {
-                if let engine { installTap(on: engine) }
-            } else if tapInstalled, let engine {
-                engine.mainMixerNode.removeTap(onBus: 0)
-                tapInstalled = false
+            updateTapInstallation()
+            if !isSpectrumEnabled {
+                startSpectrumDecay()
             }
         }
     }
 
-    private static let fftSize = 1024
-    private static let spectrumInterval: TimeInterval = 1.0 / 20.0
+    private static let spectrumInterval: TimeInterval = 1.0 / 24.0
 
     /// Created on first use. Building an `AVAudioEngine` talks to CoreAudio's
     /// HAL, which can block for seconds during app launch; deferring it keeps
     /// the first window frame instant and playback startup predictable.
     private var engine: AVAudioEngine?
     private let playerNode = AVAudioPlayerNode()
-    private let fft = vDSP.FFT(log2n: vDSP_Length(10), radix: .radix2, ofType: DSPSplitComplex.self)
-    private let window: [Float]
+    private var analyzer = SpectrumAnalyzer()
+    private var monoBuffer = [Float](repeating: 0, count: SpectrumAnalyzer.fftSize)
+    private var bandScratch = [Float](repeating: 0, count: PlayerEngine.bandCount)
+
+    public init() {}
 
     private var file: AVAudioFile?
     private var segmentStartFrame: AVAudioFramePosition = 0
@@ -56,15 +57,11 @@ public final class PlayerEngine: ObservableObject {
     private var positionTimer: Timer?
     private var tapInstalled = false
     private var lastSpectrumPublish: TimeInterval = 0
-
-    public init() {
-        var window = [Float](repeating: 0, count: Self.fftSize)
-        vDSP_hann_window(&window, vDSP_Length(Self.fftSize), Int32(vDSP_HANN_NORM))
-        self.window = window
-    }
+    private var spectrumDecayTimer: Timer?
 
     deinit {
         positionTimer?.invalidate()
+        spectrumDecayTimer?.invalidate()
         if let engine {
             engine.stop()
             if tapInstalled {
@@ -81,7 +78,7 @@ public final class PlayerEngine: ObservableObject {
         // `mainMixerNode`/the output unit. This call is synchronous, so the app
         // cannot surface that as an error; it only reports success once
         // `isPlaying` becomes true after `play()`.
-        if isSpectrumEnabled {
+        if isSpectrumEnabled && isPlaying {
             installTap(on: engine)
         }
         self.engine = engine
@@ -90,10 +87,28 @@ public final class PlayerEngine: ObservableObject {
 
     private func installTap(on engine: AVAudioEngine) {
         guard !tapInstalled else { return }
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(Self.fftSize), format: nil) { [weak self] buffer, _ in
+        engine.mainMixerNode.installTap(
+            onBus: 0,
+            bufferSize: AVAudioFrameCount(SpectrumAnalyzer.fftSize),
+            format: nil
+        ) { [weak self] buffer, _ in
             self?.handleTap(buffer)
         }
         tapInstalled = true
+    }
+
+    /// Taps exist only while someone consumes spectrum data and audio is
+    /// running; pausing or hiding the last spectrum view removes the tap.
+    private func updateTapInstallation() {
+        guard let engine else { return }
+        if isSpectrumEnabled && isPlaying {
+            if !tapInstalled {
+                installTap(on: engine)
+            }
+        } else if tapInstalled {
+            engine.mainMixerNode.removeTap(onBus: 0)
+            tapInstalled = false
+        }
     }
 
     // MARK: - Controls
@@ -118,6 +133,8 @@ public final class PlayerEngine: ObservableObject {
         pausedPosition = 0
         position = 0
         isPlaying = false
+        updateTapInstallation()
+        stopSpectrumDecay()
         spectrum = Array(repeating: 0, count: Self.bandCount)
 
         let engine = ensureEngine()
@@ -151,6 +168,8 @@ public final class PlayerEngine: ObservableObject {
 
         playerNode.play()
         isPlaying = true
+        stopSpectrumDecay()
+        updateTapInstallation()
         startPositionTimer()
     }
 
@@ -161,6 +180,8 @@ public final class PlayerEngine: ObservableObject {
         pausedPosition = current
         position = current
         isPlaying = false
+        updateTapInstallation()
+        startSpectrumDecay()
         stopPositionTimer()
     }
 
@@ -178,6 +199,8 @@ public final class PlayerEngine: ObservableObject {
         position = 0
         pausedPosition = 0
         isPlaying = false
+        updateTapInstallation()
+        stopSpectrumDecay()
         spectrum = Array(repeating: 0, count: Self.bandCount)
     }
 
@@ -201,15 +224,20 @@ public final class PlayerEngine: ObservableObject {
                 } catch {
                     lastError = "音频引擎启动失败（\(error.localizedDescription)）"
                     isPlaying = false
+                    updateTapInstallation()
                     stopPositionTimer()
                     return
                 }
             }
             playerNode.play()
             isPlaying = true
+            stopSpectrumDecay()
+            updateTapInstallation()
             startPositionTimer()
         } else {
             isPlaying = false
+            updateTapInstallation()
+            startSpectrumDecay()
             stopPositionTimer()
         }
     }
@@ -257,6 +285,8 @@ public final class PlayerEngine: ObservableObject {
         segmentScheduled = false
         stopPositionTimer()
         isPlaying = false
+        updateTapInstallation()
+        startSpectrumDecay()
         pausedPosition = duration
         position = duration
         onFinish?()
@@ -294,92 +324,70 @@ public final class PlayerEngine: ObservableObject {
     // MARK: - Spectrum
 
     private func handleTap(_ buffer: AVAudioPCMBuffer) {
-        guard isSpectrumEnabled else { return }
+        guard isSpectrumEnabled, isPlaying, let channels = buffer.floatChannelData else { return }
         let now = CFAbsoluteTimeGetCurrent()
         guard now - lastSpectrumPublish >= Self.spectrumInterval else { return }
         lastSpectrumPublish = now
 
-        guard let channels = buffer.floatChannelData, fft != nil else { return }
-        let frameCount = Int(buffer.frameLength)
+        let frameCount = min(Int(buffer.frameLength), monoBuffer.count)
         let channelCount = Int(buffer.format.channelCount)
         guard frameCount > 0, channelCount > 0 else { return }
 
-        var mono = [Float](repeating: 0, count: frameCount)
+        // Downmix into the reusable mono buffer on the audio thread.
+        for frame in 0..<frameCount {
+            monoBuffer[frame] = 0
+        }
         for channel in 0..<channelCount {
             let samples = channels[channel]
             for frame in 0..<frameCount {
-                mono[frame] += samples[frame]
+                monoBuffer[frame] += samples[frame]
             }
         }
         if channelCount > 1 {
-            var scale = 1 / Float(channelCount)
-            vDSP_vsmul(mono, 1, &scale, &mono, 1, vDSP_Length(frameCount))
-        }
-
-        var windowed = [Float](repeating: 0, count: Self.fftSize)
-        let copied = min(frameCount, Self.fftSize)
-        windowed.replaceSubrange(0..<copied, with: mono[0..<copied])
-        vDSP.multiply(windowed, window, result: &windowed)
-
-        var real = [Float](repeating: 0, count: Self.fftSize / 2)
-        var imaginary = [Float](repeating: 0, count: Self.fftSize / 2)
-        var magnitudes = [Float](repeating: 0, count: Self.fftSize / 2)
-
-        real.withUnsafeMutableBufferPointer { realPointer in
-            imaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
-                var input = DSPSplitComplex(realp: realPointer.baseAddress!, imagp: imaginaryPointer.baseAddress!)
-                windowed.withUnsafeBufferPointer { samples in
-                    samples.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: Self.fftSize / 2) { complex in
-                        vDSP_ctoz(complex, 2, &input, 1, vDSP_Length(Self.fftSize / 2))
-                    }
-                }
-                var outputReal = [Float](repeating: 0, count: Self.fftSize / 2)
-                var outputImaginary = [Float](repeating: 0, count: Self.fftSize / 2)
-                outputReal.withUnsafeMutableBufferPointer { outputRealPointer in
-                    outputImaginary.withUnsafeMutableBufferPointer { outputImaginaryPointer in
-                        var output = DSPSplitComplex(realp: outputRealPointer.baseAddress!, imagp: outputImaginaryPointer.baseAddress!)
-                        fft?.forward(input: input, output: &output)
-                        vDSP_zvabs(&output, 1, &magnitudes, 1, vDSP_Length(Self.fftSize / 2))
-                    }
-                }
+            let scale = 1 / Float(channelCount)
+            for frame in 0..<frameCount {
+                monoBuffer[frame] *= scale
             }
         }
 
-        let bands = Self.computeBands(magnitudes: magnitudes, sampleRate: buffer.format.sampleRate)
+        monoBuffer.withUnsafeBufferPointer { samples in
+            analyzer.process(
+                UnsafeBufferPointer(start: samples.baseAddress, count: frameCount),
+                sampleRate: buffer.format.sampleRate,
+                into: &bandScratch
+            )
+        }
+        // One small copy per published frame; the large FFT buffers are reused.
+        let bands = bandScratch
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.isSpectrumEnabled, self.isPlaying else { return }
+            self.stopSpectrumDecay()
             // Decay smoothing: rise instantly, fall gradually.
             self.spectrum = zip(bands, self.spectrum).map { max($0, $1 * 0.72) }
         }
     }
 
-    private static func computeBands(magnitudes: [Float], sampleRate: Double) -> [Float] {
-        let binCount = magnitudes.count
-        let minimumFrequency = 40.0
-        let maximumFrequency = min(16000.0, sampleRate / 2)
-        guard binCount > 0, maximumFrequency > minimumFrequency else {
-            return Array(repeating: 0, count: bandCount)
-        }
-
-        let frequencyRatio = maximumFrequency / minimumFrequency
-        let hertzPerBin = sampleRate / 2 / Double(binCount)
-        var bands = [Float](repeating: 0, count: bandCount)
-
-        for band in 0..<bandCount {
-            let low = minimumFrequency * pow(frequencyRatio, Double(band) / Double(bandCount))
-            let high = minimumFrequency * pow(frequencyRatio, Double(band + 1) / Double(bandCount))
-            let lowBin = min(max(Int(low / hertzPerBin), 0), binCount - 1)
-            let highBin = min(max(Int(high / hertzPerBin), lowBin), binCount - 1)
-
-            var peak: Float = 0
-            for bin in lowBin...highBin {
-                peak = max(peak, magnitudes[bin])
+    /// Fades the last frame to rest after pausing; the tap is already gone, so
+    /// this runs at the same ~24 fps for well under a second.
+    private func startSpectrumDecay() {
+        stopSpectrumDecay()
+        guard spectrum.contains(where: { $0 > 0 }) else { return }
+        let timer = Timer(timeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let next = self.spectrum.map { $0 * 0.68 }
+            if next.allSatisfy({ $0 < 0.01 }) {
+                self.spectrum = Array(repeating: 0, count: Self.bandCount)
+                self.stopSpectrumDecay()
+            } else {
+                self.spectrum = next
             }
-            // vDSP's real FFT is unnormalized; a full-scale sine peaks near
-            // fftSize / 2 after the Hann window.
-            let normalized = peak * 2 / Float(fftSize)
-            bands[band] = min(1, sqrt(normalized))
         }
-        return bands
+        RunLoop.main.add(timer, forMode: .common)
+        spectrumDecayTimer = timer
+    }
+
+    private func stopSpectrumDecay() {
+        spectrumDecayTimer?.invalidate()
+        spectrumDecayTimer = nil
     }
 }

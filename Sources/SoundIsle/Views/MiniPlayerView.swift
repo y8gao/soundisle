@@ -5,15 +5,27 @@ import SwiftUI
 /// transport buttons, expand, and a 2pt progress line along the bottom.
 struct MiniPlayerView: View {
     @ObservedObject var model: AppModel
-    @ObservedObject var engine: PlayerEngine
+    /// Deliberately not `@ObservedObject`: the parent must not re-render at
+    /// spectrum rate. Only the small spectrum/position subviews observe the
+    /// engine, so the glass capsule and transport controls stay static.
+    let engine: PlayerEngine
+    @Environment(\.colorScheme) private var colorScheme
     let onExpand: () -> Void
-
-    private let barCount = 11
 
     init(model: AppModel, onExpand: @escaping () -> Void) {
         self.model = model
-        _engine = ObservedObject(wrappedValue: model.engine)
+        self.engine = model.engine
         self.onExpand = onExpand
+    }
+
+    private var palette: ThemePalette {
+        let settings = model.library.settings
+        return ThemePalette.resolve(
+            preset: settings.preset,
+            mode: settings.mode,
+            customAccentHex: settings.customAccentHex,
+            systemIsDark: colorScheme == .dark
+        )
     }
 
     private var capsule: RoundedRectangle {
@@ -24,12 +36,12 @@ struct MiniPlayerView: View {
         content
             .frame(width: MiniPlayerWindowController.size.width, height: MiniPlayerWindowController.size.height)
             .background(WindowDragArea())
-            .background(Theme.panelTint.opacity(0.55), in: capsule)
+            .background(palette.panelTint.opacity(palette.isDark ? 0.55 : 0.78), in: capsule)
             .background(.ultraThinMaterial, in: capsule)
-            .overlay(capsule.strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            .overlay(capsule.strokeBorder(palette.hairline, lineWidth: 1))
             .overlay(alignment: .bottom) { progressLine }
             .clipShape(capsule)
-            .preferredColorScheme(.dark)
+            .soundIsleTheme(palette)
     }
 
     private var content: some View {
@@ -41,28 +53,25 @@ struct MiniPlayerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.currentTrack?.title ?? "未在播放")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(Theme.text)
+                    .foregroundColor(palette.text)
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 10.5))
-                    .foregroundColor(Theme.text.opacity(0.55))
+                    .foregroundColor(palette.text.opacity(0.55))
                     .lineLimit(1)
             }
             .frame(width: 126, alignment: .leading)
             .padding(.leading, 13)
             .allowsHitTesting(false)
 
-            spectrum
+            MiniSpectrumView(engine: engine)
                 .padding(.leading, 2)
                 .padding(.trailing, 4)
                 .allowsHitTesting(false)
 
             Spacer(minLength: 6)
 
-            Text(TimeText.string(model.displayPosition))
-                .font(.system(size: 10))
-                .monospacedDigit()
-                .foregroundColor(Theme.text.opacity(0.5))
+            MiniPositionView(model: model, engine: engine)
                 .padding(.trailing, 8)
                 .allowsHitTesting(false)
 
@@ -97,7 +106,7 @@ struct MiniPlayerView: View {
 
     private var cover: some View {
         RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(Theme.coverGradient)
+            .fill(palette.coverGradient)
             .frame(width: 44, height: 44)
             .overlay {
                 Icons.coverNote
@@ -121,50 +130,81 @@ struct MiniPlayerView: View {
         return track.artist.isEmpty ? "未知歌手" : track.artist
     }
 
-    private var spectrum: some View {
-        HStack(alignment: .bottom, spacing: 2.5) {
-            ForEach(0..<barCount, id: \.self) { index in
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [Theme.accent, Color(red: 197 / 255, green: 140 / 255, blue: 255 / 255)],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
-                    )
-                    .frame(width: 3, height: barHeight(index))
-            }
-        }
-        .frame(height: 26, alignment: .bottom)
-    }
-
-    private func barHeight(_ index: Int) -> CGFloat {
-        let bands = engine.spectrum
-        guard !bands.isEmpty else { return 3 }
-        let band = bands[min(bands.count - 1, index * bands.count / barCount)]
-        return max(3, CGFloat(min(max(band, 0), 1)) * 26)
-    }
-
     private var progressLine: some View {
+        MiniProgressLineView(model: model, engine: engine)
+    }
+}
+
+// MARK: - Live pieces
+
+/// 24 bars drawn by an AppKit view that subscribes to the engine itself, so
+/// SwiftUI stays out of the audio-rate update path.
+private struct MiniSpectrumView: View {
+    let engine: PlayerEngine
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        SpectrumBarsView(
+            engine: engine,
+            bottomColor: theme.accent,
+            topColor: theme.accentSecondary,
+            gap: 1.5,
+            minBarHeight: 3,
+            cornerRadius: 1.25
+        )
+        .frame(width: 94.5, height: 26)
+    }
+}
+
+private struct MiniPositionView: View {
+    @ObservedObject var model: AppModel
+    let engine: PlayerEngine
+    @Environment(\.theme) private var theme
+    @State private var position: TimeInterval = 0
+
+    var body: some View {
+        Text(TimeText.string(engine.duration > 0 ? position : model.displayPosition))
+            .font(.system(size: 10))
+            .monospacedDigit()
+            .foregroundColor(theme.text.opacity(0.5))
+            .onReceive(engine.$position) { position = $0 }
+            .onAppear { position = engine.position }
+    }
+}
+
+private struct MiniProgressLineView: View {
+    @ObservedObject var model: AppModel
+    let engine: PlayerEngine
+    @Environment(\.theme) private var theme
+    @State private var position: TimeInterval = 0
+    @State private var duration: TimeInterval = 0
+
+    var body: some View {
         GeometryReader { geometry in
-            let duration = model.displayDuration
-            let progress = duration > 0 ? min(max(model.displayPosition / duration, 0), 1) : 0
+            let shownDuration = engine.duration > 0 ? duration : model.displayDuration
+            let shownPosition = engine.duration > 0 ? position : model.displayPosition
+            let progress = shownDuration > 0
+                ? min(max(shownPosition / shownDuration, 0), 1)
+                : 0
             ZStack(alignment: .leading) {
                 Rectangle()
-                    .fill(Color.white.opacity(0.10))
+                    .fill(theme.sliderTrack)
                 Rectangle()
-                    .fill(Theme.accentGradient)
+                    .fill(theme.accentGradient)
                     .frame(width: geometry.size.width * progress)
             }
         }
         .frame(height: 2)
         .allowsHitTesting(false)
+        .onReceive(engine.$position) { position = $0 }
+        .onReceive(engine.$duration) { duration = $0 }
     }
 }
 
 // MARK: - Button
 
 private struct MiniButton: View {
+    @Environment(\.theme) private var theme
     let icon: Image
     let size: CGFloat
     let help: String
@@ -178,15 +218,15 @@ private struct MiniButton: View {
             ZStack {
                 if isPrimary {
                     Circle()
-                        .fill(Theme.text)
+                        .fill(theme.accent)
                         .shadow(color: .black.opacity(0.28), radius: 5, y: 2)
                     icon
-                        .foregroundColor(Color(red: 20 / 255, green: 24 / 255, blue: 38 / 255))
+                        .foregroundColor(theme.onAccent)
                 } else {
                     icon
-                        .foregroundColor(Theme.text.opacity(isHovering ? 1 : 0.82))
+                        .foregroundColor(theme.text.opacity(isHovering ? 1 : 0.82))
                         .background(
-                            isHovering ? Color.white.opacity(0.08) : Color.clear,
+                            isHovering ? theme.raisedFill : Color.clear,
                             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                         )
                 }

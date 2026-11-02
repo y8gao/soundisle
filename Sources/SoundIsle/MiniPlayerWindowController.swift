@@ -65,13 +65,13 @@ final class MiniPlayerWindowController {
         }
         applySettings()
         panel.setFrameOrigin(restoredOrigin())
-        updateSpectrum()
+        refreshSpectrumConsumers()
         panel.orderFront(nil)
     }
 
     func hide() {
         panel.orderOut(nil)
-        updateSpectrum()
+        refreshSpectrumConsumers()
     }
 
     func toggle() {
@@ -84,22 +84,19 @@ final class MiniPlayerWindowController {
 
     func expand() {
         hide()
-        updateSpectrum()
         onExpand?()
     }
 
     // MARK: - Settings
 
-    private func applySettings() {
+    func applySettings() {
         let settings = model.library.settings
         panel.level = settings.miniAlwaysOnTop ? .floating : .normal
         panel.sharingType = settings.hideFromScreenCapture ? .none : .readOnly
     }
 
-    private func updateSpectrum() {
-        // The tap is opt-in; keep it on if the main window's spectrum is also
-        // enabled (Task 14), otherwise it follows the mini window.
-        model.engine.isSpectrumEnabled = panel.isVisible || model.library.settings.showMainSpectrum
+    private func refreshSpectrumConsumers() {
+        model.refreshSpectrumConsumers()
     }
 
     // MARK: - Position

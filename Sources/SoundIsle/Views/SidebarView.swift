@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.theme) private var theme
     @State private var dropTargetID: UUID?
 
     private var selection: LibrarySelection { model.selection }
@@ -71,7 +72,7 @@ struct SidebarView: View {
                     Spacer(minLength: 0)
                 }
                 .font(.system(size: 12))
-                .foregroundColor(Theme.text.opacity(0.7))
+                .foregroundColor(theme.text.opacity(0.7))
                 .padding(.horizontal, 10)
                 .frame(height: 30)
                 .contentShape(Rectangle())
@@ -84,11 +85,11 @@ struct SidebarView: View {
             .help("从磁盘选择音乐文件夹")
         }
         .frame(maxHeight: .infinity)
-        .background(Color.white.opacity(0.02))
+        .background(theme.raisedFill.opacity(0.35))
         .background(.ultraThinMaterial)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.white.opacity(0.06))
+                .fill(theme.hairline)
                 .frame(width: 1)
         }
     }
@@ -101,7 +102,7 @@ struct SidebarView: View {
                 model.promptCreatePlaylist()
             } label: {
                 Icons.plus
-                    .foregroundColor(Theme.text.opacity(0.55))
+                    .foregroundColor(theme.text.opacity(0.55))
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
@@ -162,10 +163,10 @@ struct SidebarView: View {
     private func emptyRow(_ text: String) -> some View {
         HStack(spacing: 8) {
             Icons.playlist
-                .foregroundColor(Theme.text.opacity(0.3))
+                .foregroundColor(theme.text.opacity(0.3))
             Text(text)
                 .font(.system(size: 11.5))
-                .foregroundColor(Theme.text.opacity(0.35))
+                .foregroundColor(theme.text.opacity(0.35))
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
@@ -175,7 +176,7 @@ struct SidebarView: View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
             .tracking(1.1)
-            .foregroundColor(Theme.text.opacity(0.42))
+            .foregroundColor(theme.text.opacity(0.42))
             .padding(.horizontal, 9)
             .padding(.top, 4)
             .padding(.bottom, 5)
@@ -200,21 +201,21 @@ struct SidebarView: View {
                 Text("\(count)")
                     .font(.system(size: 10.5))
                     .monospacedDigit()
-                    .foregroundColor(Theme.text.opacity(isSelected ? 0.7 : 0.4))
+                    .foregroundColor(theme.text.opacity(isSelected ? 0.7 : 0.4))
             }
             .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
-            .foregroundColor(isSelected ? Theme.accentLight : Theme.text.opacity(0.64))
+            .foregroundColor(isSelected ? theme.accentLight : theme.text.opacity(0.64))
             .padding(.horizontal, 9)
             .frame(height: 30)
             .background(
                 isDropTarget
-                    ? Theme.accent.opacity(0.28)
-                    : (isSelected ? Theme.accent.opacity(0.16) : Color.clear),
+                    ? theme.accent.opacity(0.28)
+                    : (isSelected ? theme.accent.opacity(0.16) : Color.clear),
                 in: RoundedRectangle(cornerRadius: 7, style: .continuous)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .strokeBorder(Theme.accent.opacity(isDropTarget ? 0.6 : 0), lineWidth: 1)
+                    .strokeBorder(theme.accent.opacity(isDropTarget ? 0.6 : 0), lineWidth: 1)
             )
             .contentShape(Rectangle())
         }

@@ -6,6 +6,7 @@ import SwiftUI
 /// edge scales the text; the overlay never stores its own font size.
 struct LyricsOverlayView: View {
     @ObservedObject var model: AppModel
+    @Environment(\.colorScheme) private var colorScheme
     let onResize: (CGFloat) -> Void
 
     @State private var isHovering = false
@@ -22,6 +23,16 @@ struct LyricsOverlayView: View {
         _lineMode = State(initialValue: settings.lyricsLineMode)
     }
 
+    private var palette: ThemePalette {
+        let settings = model.library.settings
+        return ThemePalette.resolve(
+            preset: settings.preset,
+            mode: settings.mode,
+            customAccentHex: settings.customAccentHex,
+            systemIsDark: colorScheme == .dark
+        )
+    }
+
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
     }
@@ -30,9 +41,9 @@ struct LyricsOverlayView: View {
         GeometryReader { proxy in
             let fontSize = LyricsFont.size(forWidth: proxy.size.width)
             ZStack {
-                VisualEffectBackground()
+                VisualEffectBackground(material: palette.isDark ? .hudWindow : .popover)
                     .allowsHitTesting(false)
-                Color(red: 16 / 255, green: 20 / 255, blue: 31 / 255)
+                palette.playerTint
                     .opacity(opacity)
                     .allowsHitTesting(false)
                 WindowDragArea()
@@ -46,12 +57,15 @@ struct LyricsOverlayView: View {
                 }
             }
             .clipShape(shape)
-            .overlay(shape.strokeBorder(Color.white.opacity(0.17), lineWidth: 1))
+            .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
             .contentShape(shape)
             .contextMenu { lyricsMenu }
             .onHover { isHovering = $0 }
         }
-        .preferredColorScheme(.dark)
+        .soundIsleTheme(palette)
+        .onChange(of: model.library.settings.lyricsOpacity) { opacity = $0 }
+        .onChange(of: model.library.settings.lyricsOutline) { outline = $0 }
+        .onChange(of: model.library.settings.lyricsLineMode) { lineMode = $0 }
     }
 
     // MARK: - Lyrics
@@ -65,7 +79,7 @@ struct LyricsOverlayView: View {
                         model.currentLyricText ?? "",
                         size: fontSize,
                         weight: .semibold,
-                        color: .white
+                        color: palette.text
                     )
                     .lineLimit(2)
 
@@ -76,7 +90,7 @@ struct LyricsOverlayView: View {
                             next,
                             size: fontSize * 0.55,
                             weight: .regular,
-                            color: Color.white.opacity(0.52)
+                            color: palette.text.opacity(0.52)
                         )
                         .lineLimit(1)
                     }
@@ -93,7 +107,7 @@ struct LyricsOverlayView: View {
                                 line.text,
                                 size: fontSize * 0.7,
                                 weight: .regular,
-                                color: Color.white.opacity(0.85)
+                                color: palette.text.opacity(0.85)
                             )
                         }
                     }
@@ -106,7 +120,7 @@ struct LyricsOverlayView: View {
             VStack(spacing: 7) {
                 Text(model.isResolvingLyrics ? "正在匹配歌词…" : "暂无歌词")
                     .font(.system(size: max(13, fontSize * 0.6), weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(palette.text.opacity(0.8))
                 HStack(spacing: 10) {
                     Button("导入歌词…") {
                         model.promptImportLyrics()
@@ -122,7 +136,7 @@ struct LyricsOverlayView: View {
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.6))
+                .foregroundColor(palette.text.opacity(0.6))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -211,8 +225,8 @@ struct LyricsOverlayView: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(Color.black.opacity(0.38), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+            .background(palette.panelTint.opacity(0.82), in: Capsule())
+            .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 0.5))
             .padding(.bottom, 8)
         }
         .opacity(isHovering ? 1 : 0)
@@ -241,9 +255,9 @@ struct LyricsOverlayView: View {
     ) -> some View {
         Button(action: action) {
             Icons.symbol(symbol, size: 11)
-                .foregroundColor(.white.opacity(0.85))
+                .foregroundColor(palette.text.opacity(0.85))
                 .frame(width: 22, height: 22)
-                .background(Color.white.opacity(0.08), in: Circle())
+                .background(palette.raisedFill, in: Circle())
         }
         .buttonStyle(.plain)
         .help(help)
@@ -258,11 +272,11 @@ struct LyricsOverlayView: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 10.5, weight: .medium))
-                .foregroundColor(.white.opacity(isOn ? 1 : 0.8))
+                .foregroundColor(palette.text.opacity(isOn ? 1 : 0.8))
                 .padding(.horizontal, 6)
                 .frame(height: 22)
                 .background(
-                    Color.white.opacity(isOn ? 0.20 : 0.08),
+                    isOn ? palette.accent.opacity(0.24) : palette.raisedFill,
                     in: Capsule()
                 )
         }
@@ -275,16 +289,20 @@ struct LyricsOverlayView: View {
 
 /// Frosted backing. The SwiftUI tint above it carries `lyricsOpacity`.
 private struct VisualEffectBackground: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .hudWindow
+        view.material = material
         view.blendingMode = .behindWindow
         view.state = .active
         view.isEmphasized = false
         return view
     }
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+    }
 }
 
 /// Bottom-right grip. Native borderless resizing is available too, but the

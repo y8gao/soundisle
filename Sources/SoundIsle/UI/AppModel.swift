@@ -87,6 +87,8 @@ final class AppModel: ObservableObject {
     /// The overlay controller is created by `AppDelegate`; the menu bar and
     /// main window both go through the hooks below.
     weak var lyricsOverlay: LyricsOverlayWindowController?
+    /// Set by `AppDelegate` so preference changes reach the mini panel.
+    weak var miniPlayer: MiniPlayerWindowController?
     @Published var searchFocusRequest = UUID()
     @Published var endSearchFocusRequest = UUID()
     /// Mirrors the SwiftUI focus state of the search field so the local key
@@ -155,6 +157,7 @@ final class AppModel: ObservableObject {
         loadLyrics(for: currentTrack)
         installKeyMonitor()
         refreshTranscodeCacheSize()
+        applyAppearance()
     }
 
     deinit {
@@ -1315,6 +1318,107 @@ final class AppModel: ObservableObject {
         let index = lyrics?.index(at: time)
         guard currentLyricLineIndex != index else { return }
         currentLyricLineIndex = index
+    }
+
+    // MARK: - Appearance & preferences
+
+    /// Explicit light/dark modes also recolour native menus and traffic-light
+    /// chrome; system mode follows macOS.
+    func applyAppearance() {
+        let appearance: NSAppearance?
+        switch library.settings.mode {
+        case .system: appearance = nil
+        case .light: appearance = NSAppearance(named: .aqua)
+        case .dark: appearance = NSAppearance(named: .darkAqua)
+        }
+        NSApplication.shared.appearance = appearance
+    }
+
+    func setThemePreset(_ preset: ThemePreset) {
+        guard library.settings.themePreset != preset.rawValue else { return }
+        library.settings.themePreset = preset.rawValue
+        saveSettingsAndNotify()
+    }
+
+    func setThemeMode(_ mode: ThemeMode) {
+        guard library.settings.themeMode != mode.rawValue else { return }
+        library.settings.themeMode = mode.rawValue
+        applyAppearance()
+        saveSettingsAndNotify()
+    }
+
+    func setCustomAccent(hex: String?) {
+        guard library.settings.customAccentHex != hex else { return }
+        library.settings.customAccentHex = hex
+        saveSettingsAndNotify()
+    }
+
+    func setRowStyle(cover: Bool) {
+        let style = cover ? "cover" : "index"
+        guard library.settings.rowStyle != style else { return }
+        library.settings.rowStyle = style
+        saveSettingsAndNotify()
+    }
+
+    func setShowMainSpectrum(_ enabled: Bool) {
+        guard library.settings.showMainSpectrum != enabled else { return }
+        library.settings.showMainSpectrum = enabled
+        library.saveSettings()
+        refreshSpectrumConsumers()
+        objectWillChange.send()
+    }
+
+    func setHideFromScreenCapture(_ hidden: Bool) {
+        guard library.settings.hideFromScreenCapture != hidden else { return }
+        library.settings.hideFromScreenCapture = hidden
+        miniPlayer?.applySettings()
+        lyricsOverlay?.applySettings()
+        saveSettingsAndNotify()
+    }
+
+    func setMiniAlwaysOnTop(_ onTop: Bool) {
+        guard library.settings.miniAlwaysOnTop != onTop else { return }
+        library.settings.miniAlwaysOnTop = onTop
+        miniPlayer?.applySettings()
+        saveSettingsAndNotify()
+    }
+
+    func setKeepRunningOnClose(_ keepRunning: Bool) {
+        guard library.settings.keepRunningOnClose != keepRunning else { return }
+        library.settings.keepRunningOnClose = keepRunning
+        saveSettingsAndNotify()
+    }
+
+    func setOnlineLyricsEnabled(_ enabled: Bool) {
+        guard library.settings.onlineLyricsEnabled != enabled else { return }
+        library.settings.onlineLyricsEnabled = enabled
+        lyricsService.isOnlineEnabled = enabled
+        saveSettingsAndNotify()
+        if enabled {
+            loadLyrics(for: currentTrack)
+        }
+    }
+
+    /// The spectrum tap runs only while someone draws it: the mini window is
+    /// visible, or the main player bar spectrum is enabled.
+    func refreshSpectrumConsumers() {
+        engine.isSpectrumEnabled = (miniPlayer?.isVisible ?? false)
+            || library.settings.showMainSpectrum
+    }
+
+    @discardableResult
+    func removeMissingTracks() -> String {
+        library.removeMissingTracks()
+        refreshFromLibrary()
+        objectWillChange.send()
+        let message = "已移除缺失文件条目。"
+        statusMessage = message
+        return message
+    }
+
+    private func saveSettingsAndNotify() {
+        library.saveSettings()
+        objectWillChange.send()
     }
 
     // MARK: - Persistence

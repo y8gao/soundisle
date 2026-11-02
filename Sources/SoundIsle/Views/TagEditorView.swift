@@ -7,10 +7,21 @@ import UniformTypeIdentifiers
 /// field alone"; a cover is only written when the user picks or removes one.
 @MainActor
 struct TagEditorView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let model: AppModel
     let tracks: [Track]
 
     @Environment(\.dismiss) private var dismiss
+
+    private var palette: ThemePalette {
+        let settings = model.library.settings
+        return ThemePalette.resolve(
+            preset: settings.preset,
+            mode: settings.mode,
+            customAccentHex: settings.customAccentHex,
+            systemIsDark: colorScheme == .dark
+        )
+    }
 
     /// Combined once per presentation: WAV probing reads chunk headers from
     /// disk, so it must not run on every SwiftUI body evaluation.
@@ -50,7 +61,7 @@ struct TagEditorView: View {
         VStack(spacing: 0) {
             header
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(palette.hairline)
                 .frame(height: 1)
 
             ScrollView {
@@ -58,7 +69,7 @@ struct TagEditorView: View {
                     if isBatch {
                         Text("正在批量编辑 \(tracks.count) 首歌曲。留空的字段不会被修改。")
                             .font(.system(size: 11.5))
-                            .foregroundColor(Theme.text.opacity(0.6))
+                            .foregroundColor(palette.text.opacity(0.6))
                     }
                     if let limitation = capabilities.limitation {
                         limitationNote(limitation)
@@ -117,13 +128,13 @@ struct TagEditorView: View {
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.system(size: 11.5))
-                            .foregroundColor(Theme.warning)
+                            .foregroundColor(palette.warning)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     Text("留空的文本字段不会被修改。")
                         .font(.system(size: 10.5))
-                        .foregroundColor(Theme.text.opacity(0.4))
+                        .foregroundColor(palette.text.opacity(0.4))
                 }
                 .padding(22)
             }
@@ -132,7 +143,7 @@ struct TagEditorView: View {
         }
         .frame(width: 540, height: 590)
         .background(AppBackground())
-        .preferredColorScheme(.dark)
+        .soundIsleTheme(palette)
         .onAppear(perform: loadInitialValues)
     }
 
@@ -140,10 +151,10 @@ struct TagEditorView: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(isBatch ? "批量编辑标签" : "编辑标签")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(Theme.text)
+                .foregroundColor(palette.text)
             Text(isBatch ? "\(tracks.count) 首" : tracks.first?.title ?? "")
                 .font(.system(size: 11.5))
-                .foregroundColor(Theme.text.opacity(0.5))
+                .foregroundColor(palette.text.opacity(0.5))
                 .lineLimit(1)
             Spacer()
         }
@@ -170,17 +181,17 @@ struct TagEditorView: View {
     private func limitationNote(_ text: String) -> some View {
         HStack(spacing: 7) {
             Icons.warning
-                .foregroundColor(Theme.warning)
+                .foregroundColor(palette.warning)
             Text(text)
                 .font(.system(size: 11))
-                .foregroundColor(Theme.text.opacity(0.7))
+                .foregroundColor(palette.text.opacity(0.7))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            Theme.warning.opacity(0.12),
+            palette.warning.opacity(0.12),
             in: RoundedRectangle(cornerRadius: 7, style: .continuous)
         )
     }
@@ -192,7 +203,7 @@ struct TagEditorView: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(Theme.coverGradient)
+                    .fill(palette.coverGradient)
                 if let image = displayedCover {
                     Image(nsImage: image)
                         .resizable()
@@ -218,7 +229,7 @@ struct TagEditorView: View {
                 .disabled(!capabilities.canWriteArtwork)
                 Text(coverHint)
                     .font(.system(size: 10.5))
-                    .foregroundColor(Theme.text.opacity(0.5))
+                    .foregroundColor(palette.text.opacity(0.5))
             }
             Spacer(minLength: 0)
         }
@@ -409,6 +420,7 @@ struct TagEditorView: View {
 // MARK: - Field rows
 
 private struct TagTextFieldRow: View {
+    @Environment(\.theme) private var theme
     let label: String
     @Binding var text: String
     var disabled = false
@@ -441,7 +453,7 @@ private struct TagTextFieldRow: View {
                 HStack(spacing: 8) {
                     Text("修复预览：\(preview)")
                         .font(.system(size: 11))
-                        .foregroundColor(Theme.accentLight)
+                        .foregroundColor(theme.accentLight)
                         .lineLimit(1)
                     Button("应用") {
                         text = preview
@@ -454,7 +466,7 @@ private struct TagTextFieldRow: View {
             } else if let message {
                 Text(message)
                     .font(.system(size: 10.5))
-                    .foregroundColor(Theme.text.opacity(0.45))
+                    .foregroundColor(theme.text.opacity(0.45))
                     .padding(.leading, 80)
             }
         }
@@ -463,12 +475,13 @@ private struct TagTextFieldRow: View {
     private var labelText: some View {
         Text(label)
             .font(.system(size: 11.5))
-            .foregroundColor(Theme.text.opacity(disabled ? 0.35 : 0.7))
+            .foregroundColor(theme.text.opacity(disabled ? 0.35 : 0.7))
             .frame(width: 72, alignment: .trailing)
     }
 }
 
 private struct TagNumberFieldRow: View {
+    @Environment(\.theme) private var theme
     let label: String
     @Binding var text: String
     var disabled = false
@@ -478,7 +491,7 @@ private struct TagNumberFieldRow: View {
         HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 11.5))
-                .foregroundColor(Theme.text.opacity(disabled ? 0.35 : 0.7))
+                .foregroundColor(theme.text.opacity(disabled ? 0.35 : 0.7))
                 .frame(width: 72, alignment: .trailing)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.roundedBorder)

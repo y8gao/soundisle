@@ -7,10 +7,22 @@ import SwiftUI
 /// touches the disk.
 @MainActor
 struct OrganizerPreviewView: View {
+    @Environment(\.colorScheme) private var colorScheme
     let model: AppModel
     let tracks: [Track]
 
     @Environment(\.dismiss) private var dismiss
+
+    private var palette: ThemePalette {
+        let settings = model.library.settings
+        return ThemePalette.resolve(
+            preset: settings.preset,
+            mode: settings.mode,
+            customAccentHex: settings.customAccentHex,
+            systemIsDark: colorScheme == .dark
+        )
+    }
+
 
     @State private var template: String
     @State private var destinationRoot: URL
@@ -55,7 +67,7 @@ struct OrganizerPreviewView: View {
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.system(size: 11.5))
-                            .foregroundColor(Theme.warning)
+                            .foregroundColor(palette.warning)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -67,7 +79,7 @@ struct OrganizerPreviewView: View {
         }
         .frame(width: 760, height: 620)
         .background(AppBackground())
-        .preferredColorScheme(.dark)
+        .soundIsleTheme(palette)
     }
 
     // MARK: - Header / footer
@@ -76,10 +88,10 @@ struct OrganizerPreviewView: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text("整理文件")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(Theme.text)
+                .foregroundColor(palette.text)
             Text("\(tracks.count) 首 · 预览后才会执行")
                 .font(.system(size: 11.5))
-                .foregroundColor(Theme.text.opacity(0.5))
+                .foregroundColor(palette.text.opacity(0.5))
             Spacer()
         }
         .padding(.horizontal, 22)
@@ -90,7 +102,7 @@ struct OrganizerPreviewView: View {
         HStack(spacing: 10) {
             Text(copy ? "原文件保留，只新增副本。" : "原文件夹中的文件会移到新路径。")
                 .font(.system(size: 10.5))
-                .foregroundColor(Theme.text.opacity(0.45))
+                .foregroundColor(palette.text.opacity(0.45))
             Spacer()
             Button("取消") { dismiss() }
             Button("开始整理") { confirm() }
@@ -116,7 +128,7 @@ struct OrganizerPreviewView: View {
                 .frame(width: 240)
                 Text(template)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundColor(Theme.text.opacity(0.4))
+                    .foregroundColor(palette.text.opacity(0.4))
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -125,14 +137,14 @@ struct OrganizerPreviewView: View {
                 optionLabel("目标文件夹")
                 Text(destinationRoot.path)
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(Theme.text.opacity(0.8))
+                    .foregroundColor(palette.text.opacity(0.8))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .padding(.horizontal, 8)
                     .frame(height: 24)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        Color.white.opacity(0.06),
+                        palette.raisedFill,
                         in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                     )
                     .help(destinationRoot.path)
@@ -150,7 +162,7 @@ struct OrganizerPreviewView: View {
                 .frame(width: 140)
                 Text("不会覆盖目标位置已有的同名文件。")
                     .font(.system(size: 10.5))
-                    .foregroundColor(Theme.text.opacity(0.45))
+                    .foregroundColor(palette.text.opacity(0.45))
                 Spacer(minLength: 0)
             }
         }
@@ -159,7 +171,7 @@ struct OrganizerPreviewView: View {
     private func optionLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11.5))
-            .foregroundColor(Theme.text.opacity(0.7))
+            .foregroundColor(palette.text.opacity(0.7))
             .frame(width: 66, alignment: .trailing)
     }
 
@@ -168,11 +180,11 @@ struct OrganizerPreviewView: View {
         return HStack(spacing: 8) {
             Text("共 \(items.count) 个文件")
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundColor(Theme.text.opacity(0.75))
+                .foregroundColor(palette.text.opacity(0.75))
             if conflicts > 0 {
                 Text("\(conflicts) 个同名冲突已自动编号，不会覆盖")
                     .font(.system(size: 10.5))
-                    .foregroundColor(Theme.warning)
+                    .foregroundColor(palette.warning)
             }
             Spacer()
         }
@@ -189,33 +201,33 @@ struct OrganizerPreviewView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.system(size: 10.5, weight: .semibold))
-            .foregroundColor(Theme.text.opacity(0.5))
+            .foregroundColor(palette.text.opacity(0.5))
             .padding(.horizontal, 12)
             .frame(height: 30)
-            .background(Color.white.opacity(0.05))
+            .background(palette.raisedFill)
 
             if items.isEmpty {
                 Text("没有需要整理的文件，可能已经在目标位置。")
                     .font(.system(size: 11.5))
-                    .foregroundColor(Theme.text.opacity(0.45))
+                    .foregroundColor(palette.text.opacity(0.45))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
             } else {
                 ForEach(items, id: \.destination) { item in
                     previewRow(item)
                     Rectangle()
-                        .fill(Color.white.opacity(0.05))
+                        .fill(palette.raisedFill)
                         .frame(height: 1)
                 }
             }
         }
         .background(
-            Color.white.opacity(0.03),
+            palette.raisedFill.opacity(0.6),
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                .strokeBorder(palette.hairline, lineWidth: 0.5)
         )
     }
 
@@ -223,20 +235,20 @@ struct OrganizerPreviewView: View {
         HStack(alignment: .top, spacing: 10) {
             Text(item.source.path)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundColor(Theme.text.opacity(0.6))
+                .foregroundColor(palette.text.opacity(0.6))
             HStack(alignment: .top, spacing: 5) {
                 Text("→")
-                    .foregroundColor(Theme.accentLight.opacity(0.7))
+                    .foregroundColor(palette.accentLight.opacity(0.7))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.destination.path)
-                        .foregroundColor(Theme.text.opacity(0.9))
+                        .foregroundColor(palette.text.opacity(0.9))
                     if item.conflictResolved {
                         Text("同名已避让")
                             .font(.system(size: 9.5, weight: .medium))
-                            .foregroundColor(Theme.warning)
+                            .foregroundColor(palette.warning)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(Theme.warning.opacity(0.14), in: Capsule())
+                            .background(palette.warning.opacity(0.14), in: Capsule())
                     }
                 }
             }
@@ -252,7 +264,7 @@ struct OrganizerPreviewView: View {
 
     private var divider: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.08))
+            .fill(palette.hairline)
             .frame(height: 1)
     }
 

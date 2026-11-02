@@ -1,43 +1,36 @@
 import AppKit
+import SoundIsleCore
 import SwiftUI
 
-/// Settings shell. Tasks 12-14 fill the remaining sections in; tag editing
-/// already exposes its undo controls here.
+/// Settings shell. Cache/FFmpeg and tag-undo controls arrived in tasks 11-13;
+/// task 14 fills the lyrics and appearance groups and shows missing/unreadable
+/// files collected by the scanner.
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     /// Undo/clear feedback stays visible inside this sheet instead of only in
     /// the track list behind it.
     @State private var notice: String?
     @State private var cacheNotice: String?
 
-    private enum SectionID: Hashable {
-        case folders
-        case cache
-        case lyrics
-        case appearance
-    }
+    private var settings: AppSettings { model.library.settings }
 
-    private struct Section: Identifiable {
-        let id: SectionID
-        let title: String
-        let subtitle: String
-        let icon: Image
+    private var palette: ThemePalette {
+        ThemePalette.resolve(
+            preset: settings.preset,
+            mode: settings.mode,
+            customAccentHex: settings.customAccentHex,
+            systemIsDark: colorScheme == .dark
+        )
     }
-
-    private let sections = [
-        Section(id: .folders, title: "音乐文件夹", subtitle: "导入目录、重新扫描与缺失文件", icon: Icons.settingsFolders),
-        Section(id: .cache, title: "缓存", subtitle: "转码缓存占用与 FFmpeg 路径", icon: Icons.settingsCache),
-        Section(id: .lyrics, title: "歌词", subtitle: "桌面歌词与在线歌词来源", icon: Icons.settingsLyrics),
-        Section(id: .appearance, title: "外观", subtitle: "主题皮肤、明暗模式与透明度", icon: Icons.settingsAppearance),
-    ]
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("设置")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(Theme.text)
+                    .foregroundColor(palette.text)
                 Spacer()
                 Button("完成") {
                     dismiss()
@@ -48,140 +41,442 @@ struct SettingsView: View {
             .frame(height: 52)
 
             Rectangle()
-                .fill(Color.white.opacity(0.08))
+                .fill(palette.hairline)
                 .frame(height: 1)
 
             ScrollView {
                 VStack(spacing: 10) {
                     tagEditingSection
-
-                    ForEach(sections) { section in
-                        if section.id == .cache {
-                            cacheSection
-                        } else {
-                            HStack(spacing: 13) {
-                                section.icon
-                                    .foregroundColor(Theme.accent)
-                                    .frame(width: 24)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(section.title)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundColor(Theme.text)
-                                    Text(section.subtitle)
-                                        .font(.system(size: 11))
-                                        .foregroundColor(Theme.text.opacity(0.5))
-                                }
-                                Spacer(minLength: 12)
-                                Text("即将提供")
-                                    .font(.system(size: 10.5))
-                                    .foregroundColor(Theme.text.opacity(0.35))
-                            }
-                            .padding(14)
-                            .glassPanel(cornerRadius: 10)
-                        }
-                    }
+                    foldersSection
+                    cacheSection
+                    lyricsSection
+                    appearanceSection
                 }
                 .padding(22)
             }
         }
-        .frame(width: 520, height: 440)
+        .frame(width: 580, height: 680)
         .background(AppBackground())
-        .preferredColorScheme(.dark)
+        .soundIsleTheme(palette)
         .onAppear { model.refreshTranscodeCacheSize() }
     }
 
+    // MARK: - Tag editing
+
     private var tagEditingSection: some View {
-        HStack(alignment: .top, spacing: 13) {
-            Icons.settingsTags
-                .foregroundColor(Theme.accent)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 7) {
-                Text("标签编辑")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Theme.text)
-                Text("每次保存都会记录修改前后的标签，最多保留 50 条。")
-                    .font(.system(size: 11))
-                    .foregroundColor(Theme.text.opacity(0.5))
-                HStack(spacing: 10) {
-                    Button("撤销最近一次标签编辑") {
-                        notice = model.undoLastTagEdit()
-                    }
-                    .disabled(!model.canUndoTagEdit)
-
-                    Button("清空编辑撤销记录") {
-                        if confirmClearUndo() {
-                            notice = model.clearTagUndoHistory()
-                        }
-                    }
-                    .disabled(model.tagUndoCount == 0)
-
-                    Text("\(model.tagUndoCount) 条记录")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(Theme.text.opacity(0.4))
+        sectionCard(icon: Icons.settingsTags, title: "标签编辑") {
+            Text("每次保存都会记录修改前后的标签，最多保留 50 条。")
+                .font(.system(size: 11))
+                .foregroundColor(palette.text.opacity(0.5))
+            HStack(spacing: 10) {
+                Button("撤销最近一次标签编辑") {
+                    notice = model.undoLastTagEdit()
                 }
-                if let notice {
-                    Text(notice)
-                        .font(.system(size: 10.5))
-                        .foregroundColor(Theme.accentLight)
-                        .fixedSize(horizontal: false, vertical: true)
+                .disabled(!model.canUndoTagEdit)
+
+                Button("清空编辑撤销记录") {
+                    if confirmClearUndo() {
+                        notice = model.clearTagUndoHistory()
+                    }
                 }
+                .disabled(model.tagUndoCount == 0)
+
+                Text("\(model.tagUndoCount) 条记录")
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.text.opacity(0.4))
             }
-            Spacer(minLength: 0)
+            if let notice {
+                Text(notice)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.accentLight)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(14)
-        .glassPanel(cornerRadius: 10)
     }
 
-    private var cacheSection: some View {
-        HStack(alignment: .top, spacing: 13) {
-            Icons.settingsCache
-                .foregroundColor(Theme.accent)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 8) {
-                Text("缓存")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(Theme.text)
-                Text("不支持的格式会转换为 ALAC 后缓存在这里，清理不会删除原始文件。")
-                    .font(.system(size: 11))
-                    .foregroundColor(Theme.text.opacity(0.5))
-                HStack(spacing: 10) {
-                    Button("清理缓存") {
-                        cacheNotice = model.clearTranscodeCache()
+    // MARK: - Folders, missing and unreadable files
+
+    private var foldersSection: some View {
+        sectionCard(icon: Icons.settingsFolders, title: "音乐文件夹") {
+            Text(model.folders.isEmpty ? "尚未导入文件夹。" : "已导入 \(model.folders.count) 个文件夹。")
+                .font(.system(size: 11))
+                .foregroundColor(palette.text.opacity(0.5))
+
+            ForEach(model.folders.prefix(3), id: \.self) { folder in
+                Text(folder.path)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.text.opacity(0.42))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            let missing = model.library.missingTracks
+            if !missing.isEmpty {
+                Divider().overlay(palette.hairline)
+                HStack(spacing: 8) {
+                    Text("缺失文件 \(missing.count) 首")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(palette.warning)
+                    Spacer(minLength: 8)
+                    Button("移除缺失条目") {
+                        notice = model.removeMissingTracks()
                     }
-                    .disabled(model.transcodeCacheBytes == 0)
-                    Text(model.transcodeCacheSizeText)
-                        .font(.system(size: 10.5))
-                        .foregroundColor(Theme.text.opacity(0.4))
                 }
-                HStack(spacing: 10) {
-                    Text("FFmpeg")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Theme.text.opacity(0.7))
-                    Text(model.ffmpegPathText)
+                ForEach(missing.prefix(3)) { track in
+                    Text("\(track.title) — \(track.url.lastPathComponent)")
                         .font(.system(size: 10.5))
-                        .foregroundColor(
-                            model.ffmpegPathText == "未找到"
-                                ? Theme.warning
-                                : Theme.text.opacity(0.5)
-                        )
+                        .foregroundColor(palette.text.opacity(0.45))
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Spacer(minLength: 6)
-                    Button("重新检测") {
-                        cacheNotice = model.redetectFFmpeg()
-                    }
-                    Button("选择文件…") {
-                        if let message = model.chooseFFmpegPath() {
-                            cacheNotice = message
-                        }
-                    }
                 }
-                if let cacheNotice {
-                    Text(cacheNotice)
+                if missing.count > 3 {
+                    Text("另有 \(missing.count - 3) 首…")
                         .font(.system(size: 10.5))
-                        .foregroundColor(Theme.accentLight)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundColor(palette.text.opacity(0.35))
                 }
+            }
+
+            let unreadable = model.library.unreadableURLs
+            if !unreadable.isEmpty {
+                Divider().overlay(palette.hairline)
+                Text("无法读取 \(unreadable.count) 个文件")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(palette.warning)
+                ForEach(unreadable.prefix(3), id: \.self) { url in
+                    Text(url.lastPathComponent)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(palette.text.opacity(0.45))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                if unreadable.count > 3 {
+                    Text("另有 \(unreadable.count - 3) 个…")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(palette.text.opacity(0.35))
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button("添加文件夹…") {
+                    model.importFolders(model.openFolders())
+                }
+                Button("重新扫描") {
+                    Task { await model.rescan() }
+                }
+                .disabled(model.isScanning)
+                if model.isScanning {
+                    Text("扫描中…")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(palette.text.opacity(0.4))
+                }
+            }
+        }
+    }
+
+    // MARK: - Cache
+
+    private var cacheSection: some View {
+        sectionCard(icon: Icons.settingsCache, title: "缓存") {
+            Text("不支持的格式会转换为 ALAC 后缓存在这里，清理不会删除原始文件。")
+                .font(.system(size: 11))
+                .foregroundColor(palette.text.opacity(0.5))
+            HStack(spacing: 10) {
+                Button("清理缓存") {
+                    cacheNotice = model.clearTranscodeCache()
+                }
+                .disabled(model.transcodeCacheBytes == 0)
+                Text(model.transcodeCacheSizeText)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.text.opacity(0.4))
+            }
+            HStack(spacing: 10) {
+                Text("FFmpeg")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(palette.text.opacity(0.7))
+                Text(model.ffmpegPathText)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(
+                        model.ffmpegPathText == "未找到"
+                            ? palette.warning
+                            : palette.text.opacity(0.5)
+                    )
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 6)
+                Button("重新检测") {
+                    cacheNotice = model.redetectFFmpeg()
+                }
+                Button("选择文件…") {
+                    if let message = model.chooseFFmpegPath() {
+                        cacheNotice = message
+                    }
+                }
+            }
+            if let cacheNotice {
+                Text(cacheNotice)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.accentLight)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Lyrics
+
+    private var lyricsSection: some View {
+        sectionCard(icon: Icons.settingsLyrics, title: "歌词") {
+            Text("桌面歌词窗与在线歌词来源。")
+                .font(.system(size: 11))
+                .foregroundColor(palette.text.opacity(0.5))
+
+            Toggle(
+                "启用在线歌词匹配",
+                isOn: Binding(
+                    get: { settings.onlineLyricsEnabled },
+                    set: { model.setOnlineLyricsEnabled($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .foregroundColor(palette.text.opacity(0.82))
+
+            HStack(spacing: 10) {
+                Text("背景不透明度")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                Slider(
+                    value: Binding(
+                        get: { settings.lyricsOpacity },
+                        set: { model.setLyricsOpacity($0) }
+                    ),
+                    in: 0.05...0.9
+                )
+                Text("\(Int((settings.lyricsOpacity * 100).rounded()))%")
+                    .font(.system(size: 10.5))
+                    .monospacedDigit()
+                    .foregroundColor(palette.text.opacity(0.5))
+                    .frame(width: 36, alignment: .trailing)
+            }
+
+            Toggle(
+                "歌词文字描边",
+                isOn: Binding(
+                    get: { settings.lyricsOutline },
+                    set: { model.setLyricsOutline($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .foregroundColor(palette.text.opacity(0.82))
+
+            HStack(spacing: 10) {
+                Text("显示行数")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { settings.lyricsLineMode },
+                        set: { model.setLyricsLineMode($0) }
+                    )
+                ) {
+                    Text("单行").tag("one")
+                    Text("双行").tag("two")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 140)
+            }
+        }
+    }
+
+    // MARK: - Appearance
+
+    private var appearanceSection: some View {
+        sectionCard(icon: Icons.settingsAppearance, title: "外观") {
+            Text("主题皮肤")
+                .font(.system(size: 11))
+                .foregroundColor(palette.text.opacity(0.55))
+
+            HStack(spacing: 8) {
+                ForEach(ThemePreset.allCases, id: \.self) { preset in
+                    presetSwatch(preset)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Text("明暗模式")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { settings.mode },
+                        set: { model.setThemeMode($0) }
+                    )
+                ) {
+                    ForEach(ThemeMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 240)
+            }
+
+            HStack(spacing: 10) {
+                Text("自定义强调色")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                ColorPicker("", selection: accentColorBinding, supportsOpacity: false)
+                    .labelsHidden()
+                Text("Aa")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(palette.onAccent)
+                    .frame(width: 28, height: 22)
+                    .background(palette.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .help("使用强调色时的文字对比度")
+                Button("恢复默认") {
+                    model.setCustomAccent(hex: nil)
+                }
+                .disabled(settings.customAccentHex == nil)
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                Text("列表行样式")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { settings.usesCoverRowStyle },
+                        set: { model.setRowStyle(cover: $0) }
+                    )
+                ) {
+                    Text("序号").tag(false)
+                    Text("封面").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 140)
+                Spacer(minLength: 0)
+            }
+
+            Divider().overlay(palette.hairline)
+
+            Toggle(
+                "在播放条底部显示频谱",
+                isOn: Binding(
+                    get: { settings.showMainSpectrum },
+                    set: { model.setShowMainSpectrum($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .foregroundColor(palette.text.opacity(0.82))
+
+            Toggle(
+                "在屏幕录制中隐藏窗口",
+                isOn: Binding(
+                    get: { settings.hideFromScreenCapture },
+                    set: { model.setHideFromScreenCapture($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .foregroundColor(palette.text.opacity(0.82))
+
+            Toggle(
+                "迷你窗始终置顶",
+                isOn: Binding(
+                    get: { settings.miniAlwaysOnTop },
+                    set: { model.setMiniAlwaysOnTop($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .foregroundColor(palette.text.opacity(0.82))
+
+            Toggle(
+                "关闭主窗口后继续运行",
+                isOn: Binding(
+                    get: { settings.keepRunningOnClose },
+                    set: { model.setKeepRunningOnClose($0) }
+                )
+            )
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .foregroundColor(palette.text.opacity(0.82))
+        }
+    }
+
+    private func presetSwatch(_ preset: ThemePreset) -> some View {
+        let selected = settings.preset == preset
+        let preview = ThemePalette(
+            preset: preset,
+            tokens: ThemeCatalog.tokens(for: preset, isDark: palette.isDark)
+        )
+        return Button {
+            model.setThemePreset(preset)
+        } label: {
+            VStack(spacing: 4) {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [preview.backgroundMiddle, preview.accent],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(height: 26)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(
+                                selected ? palette.accent : palette.hairline,
+                                lineWidth: selected ? 2 : 1
+                            )
+                    )
+                Text(preset.displayName)
+                    .font(.system(size: 9.5, weight: selected ? .semibold : .regular))
+                    .foregroundColor(palette.text.opacity(selected ? 1 : 0.55))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(preset.displayName)
+    }
+
+    private var accentColorBinding: Binding<Color> {
+        Binding(
+            get: { Color(hex: settings.customAccentHex ?? palette.tokens.accentHex) },
+            set: { model.setCustomAccent(hex: $0.hexString) }
+        )
+    }
+
+    // MARK: - Pieces
+
+    private func sectionCard<Content: View>(
+        icon: Image,
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .top, spacing: 13) {
+            icon
+                .foregroundColor(palette.accent)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(palette.text)
+                content()
             }
             Spacer(minLength: 0)
         }

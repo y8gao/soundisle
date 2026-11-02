@@ -117,7 +117,7 @@ final class LyricsOverlayWindowController {
         saveFrame()
     }
 
-    private func applySettings() {
+    func applySettings() {
         let settings = model.library.settings
         panel.level = .floating
         panel.sharingType = settings.hideFromScreenCapture ? .none : .readOnly
