@@ -21,55 +21,67 @@ enum TimeText {
 
 // MARK: - Player bar
 
+/// One 84pt glass strip: cover/title on the left, transport centred in the
+/// window, utilities on the right. The only progress affordance is a 3pt line
+/// hugging the top edge; elapsed/total time sit in the bottom corners so the
+/// bar reads as one layer instead of stacked rows.
 struct PlayerBarView: View {
     @ObservedObject var model: AppModel
     @Environment(\.theme) private var theme
 
     var body: some View {
-        HStack(spacing: 0) {
-            trackInfo
-                .frame(width: 220, alignment: .leading)
-
-            centerColumn
-                .frame(minWidth: 280, maxWidth: 460, alignment: .leading)
-                .layoutPriority(1)
-                .padding(.leading, 16)
-
-            Spacer(minLength: 12)
-
-            rightControls
-                .frame(width: 210, alignment: .trailing)
-        }
-        .padding(.horizontal, 18)
-        .frame(height: 76)
-        // Behind the controls, in front of the bar's material.
-        .background(alignment: .bottom) {
+        ZStack {
             if model.library.settings.showMainSpectrum {
                 MainSpectrumView(engine: model.engine)
-                    .frame(height: 18)
+                    .frame(height: 16)
                     .padding(.horizontal, 18)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
                     .allowsHitTesting(false)
             }
+
+            HStack(spacing: 0) {
+                trackInfo
+                    .frame(width: 220, alignment: .leading)
+                Spacer(minLength: 12)
+                rightControls
+                    .frame(width: 210, alignment: .trailing)
+            }
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Centred in the window, nudged below the top-edge progress strip.
+            transport
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.top, 6)
         }
-        .background(theme.playerTint.opacity(theme.isDark ? 0.42 : 0.72))
+        .frame(height: 84)
+        .background(theme.playerTint.opacity(theme.isDark ? 0.34 : 0.62))
         .background(.ultraThinMaterial)
+        // Only the top 14pt takes hover/drag; the transport below stays free.
         .overlay(alignment: .top) {
-            Rectangle()
-                .fill(theme.hairline)
-                .frame(height: 1)
+            PlayerProgressLine(model: model, engine: model.engine)
         }
-        .clipped()
+        .overlay(alignment: .bottom) {
+            PlayerBarTimes(model: model, engine: model.engine)
+        }
     }
 
     // MARK: Left
 
     private var trackInfo: some View {
         HStack(spacing: 13) {
-            TrackCoverView(
-                url: model.currentTrack.flatMap { model.library.artworkURL(for: $0) },
-                size: 42,
-                cornerRadius: 8
-            )
+            Button {
+                model.toggleLyricsPage()
+            } label: {
+                TrackCoverView(
+                    url: model.currentTrack.flatMap { model.library.artworkURL(for: $0) },
+                    size: 42,
+                    cornerRadius: 8
+                )
+            }
+            .buttonStyle(.plain)
+            .help(model.showsLyricsPage ? "返回歌曲列表" : "查看当前歌曲歌词")
+            .accessibilityLabel(model.showsLyricsPage ? "封面，返回歌曲列表" : "封面，打开歌词页")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.currentTrack?.title ?? "未在播放")
@@ -125,42 +137,37 @@ struct PlayerBarView: View {
 
     // MARK: Center
 
-    private var centerColumn: some View {
-        VStack(spacing: 5) {
-            HStack(spacing: 20) {
-                PlayerIconButton(icon: Icons.previous, size: 34) {
-                    model.previous()
-                }
-                .help("上一首")
-
-                Button {
-                    model.togglePlayPause()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(theme.accent)
-                            .shadow(color: .black.opacity(0.28), radius: 6, y: 3)
-                        (model.isPlaying ? Icons.pause : Icons.play)
-                            .foregroundColor(theme.onAccent)
-                    }
-                    .frame(width: 38, height: 38)
-                    .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .help(model.isPlaying ? "暂停" : "播放")
-
-                PlayerIconButton(icon: Icons.next, size: 34) {
-                    model.next()
-                }
-                .help("下一首")
+    private var transport: some View {
+        HStack(spacing: 20) {
+            PlayerIconButton(icon: Icons.previous, size: 34) {
+                model.previous()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 6)
+            .help("上一首")
+            .accessibilityLabel("上一首")
 
-            // Isolated: engine position updates re-render only this row. The
-            // spectrum lives in its own view so audio-rate updates never touch
-            // the rest of the player bar.
-            PlayerProgressView(model: model, engine: model.engine)
+            Button {
+                model.togglePlayPause()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(theme.accent)
+                        .shadow(color: theme.accent.opacity(0.35), radius: 8, y: 3)
+                        .shadow(color: .black.opacity(0.22), radius: 4, y: 2)
+                    (model.isPlaying ? Icons.pause : Icons.play)
+                        .foregroundColor(theme.onAccent)
+                }
+                .frame(width: 38, height: 38)
+                .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help(model.isPlaying ? "暂停" : "播放")
+            .accessibilityLabel(model.isPlaying ? "暂停" : "播放")
+
+            PlayerIconButton(icon: Icons.next, size: 34) {
+                model.next()
+            }
+            .help("下一首")
+            .accessibilityLabel("下一首")
         }
     }
 
@@ -168,7 +175,7 @@ struct PlayerBarView: View {
 
     private var rightControls: some View {
         HStack(spacing: 8) {
-            PlayerIconButton(icon: modeIcon, size: 28) {
+            PlayerIconButton(icon: modeIcon, size: 30) {
                 cyclePlaybackMode()
             }
             .help(modeHelp)
@@ -180,8 +187,8 @@ struct PlayerBarView: View {
                 model.toggleLyricsVisibility()
             }
             .help(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
+            .accessibilityLabel(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
         }
-        .opacity(0.85)
     }
 }
 
@@ -231,14 +238,19 @@ struct TrackCoverView: View {
     }
 }
 
-// MARK: - Progress
+// MARK: - Top-edge progress
 
-private struct PlayerProgressView: View {
+/// Full-width 3pt line at the very top of the bar. Hovering (or dragging)
+/// grows it to 6pt and enlarges the frosted, accent-glowing position dot.
+/// The whole control is only 14pt tall, so it never covers the transport.
+private struct PlayerProgressLine: View {
     @ObservedObject var model: AppModel
     let engine: PlayerEngine
     @Environment(\.theme) private var theme
     @State private var position: TimeInterval = 0
     @State private var duration: TimeInterval = 0
+    @State private var isHovering = false
+    @State private var dragValue: Double?
 
     private var shownPosition: TimeInterval {
         engine.duration > 0 ? position : model.displayPosition
@@ -249,28 +261,103 @@ private struct PlayerProgressView: View {
     }
 
     var body: some View {
-        VStack(spacing: 2) {
-            ProgressSlider(
-                value: shownPosition,
-                duration: shownDuration,
-                onSeek: { model.seek(to: $0) }
+        GeometryReader { geometry in
+            let width = max(geometry.size.width, 1)
+            let shown = dragValue ?? shownPosition
+            let progress = shownDuration > 0
+                ? min(max(shown / shownDuration, 0), 1)
+                : 0
+            let active = isHovering || dragValue != nil
+            let lineHeight: CGFloat = active ? 6 : 3
+            let knob: CGFloat = active ? 12 : 9
+            let knobX = min(
+                max(width * CGFloat(progress), knob / 2),
+                max(width - knob / 2, knob / 2)
             )
-            .frame(maxWidth: .infinity)
-            .frame(height: 14)
 
-            HStack(spacing: 0) {
-                Text(TimeText.string(shownPosition))
-                Spacer(minLength: 0)
-                Text(TimeText.string(shownDuration))
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(theme.sliderTrack)
+                    .frame(height: lineHeight)
+
+                Rectangle()
+                    .fill(theme.accentGradient)
+                    .frame(width: width * CGFloat(progress), height: lineHeight)
+
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(Circle().fill(Color.white.opacity(0.55)))
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
+                    .frame(width: knob, height: knob)
+                    .shadow(color: theme.accent.opacity(0.85), radius: knob * 0.7)
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                    .position(x: knobX, y: lineHeight / 2 + 3)
             }
-            .font(.system(size: 9.5))
-            .monospacedDigit()
-            .foregroundColor(theme.text.opacity(0.72))
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .animation(.easeOut(duration: 0.16), value: active)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isHovering = hovering
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        guard shownDuration > 0 else { return }
+                        dragValue = min(max(Double(gesture.location.x / width), 0), 1)
+                            * shownDuration
+                    }
+                    .onEnded { gesture in
+                        guard shownDuration > 0 else {
+                            dragValue = nil
+                            return
+                        }
+                        let target = min(max(Double(gesture.location.x / width), 0), 1)
+                            * shownDuration
+                        dragValue = nil
+                        model.seek(to: target)
+                    }
+            )
         }
-        .frame(maxWidth: .infinity)
-        // Only position/duration drive this row. Observing the whole engine
-        // would re-render it at the spectrum's ~20 fps.
+        .frame(height: 14)
+        .accessibilityElement()
+        .accessibilityLabel("播放进度")
+        .accessibilityValue(
+            "\(TimeText.string(dragValue ?? shownPosition)) / \(TimeText.string(shownDuration))"
+        )
+        .onReceive(engine.$position) { position = $0 }
+        .onReceive(engine.$duration) { duration = $0 }
+        .onAppear {
+            position = engine.position
+            duration = engine.duration
+        }
+    }
+}
+
+// MARK: - Corner times
+
+/// Elapsed and total time in the bar's bottom corners. Observing only the
+/// engine's position/duration keeps audio-rate updates inside this strip.
+private struct PlayerBarTimes: View {
+    @ObservedObject var model: AppModel
+    let engine: PlayerEngine
+    @Environment(\.theme) private var theme
+    @State private var position: TimeInterval = 0
+    @State private var duration: TimeInterval = 0
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Text(TimeText.string(engine.duration > 0 ? position : model.displayPosition))
+            Spacer(minLength: 0)
+            Text(TimeText.string(engine.duration > 0 ? duration : model.displayDuration))
+        }
+        .font(.system(size: 9.5))
+        .monospacedDigit()
+        .foregroundColor(theme.mutedText(0.55))
+        .padding(.horizontal, 18)
+        .padding(.bottom, 4)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("播放时间")
         .onReceive(engine.$position) { position = $0 }
         .onReceive(engine.$duration) { duration = $0 }
         .onAppear {
@@ -314,7 +401,7 @@ private struct PlayerIconButton: View {
     var body: some View {
         Button(action: action) {
             icon
-                .foregroundColor(theme.text.opacity(isHovering ? 1 : 0.86))
+                .foregroundColor(isHovering ? theme.accent : theme.text.opacity(0.86))
                 .frame(width: size, height: size)
                 .background(
                     isHovering ? theme.raisedFill : Color.clear,
@@ -324,59 +411,6 @@ private struct PlayerIconButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-    }
-}
-
-// MARK: - Sliders
-
-private struct ProgressSlider: View {
-    @Environment(\.theme) private var theme
-    let value: Double
-    let duration: Double
-    let onSeek: (Double) -> Void
-
-    @State private var dragValue: Double?
-
-    var body: some View {
-        GeometryReader { geometry in
-            let width = max(geometry.size.width, 1)
-            let shown = dragValue ?? value
-            let progress = duration > 0 ? min(max(shown / duration, 0), 1) : 0
-            let knobX = min(max(width * progress - 4.5, 0), max(width - 9, 0))
-
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(theme.sliderTrack)
-                    .frame(height: 4)
-                Capsule()
-                    .fill(theme.accentGradient)
-                    .frame(width: width * progress, height: 4)
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 9, height: 9)
-                    .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-                    .offset(x: knobX)
-            }
-            .frame(maxHeight: .infinity, alignment: .center)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { gesture in
-                        guard duration > 0 else { return }
-                        dragValue = min(max(gesture.location.x / width, 0), 1) * duration
-                    }
-                    .onEnded { gesture in
-                        guard duration > 0 else {
-                            dragValue = nil
-                            return
-                        }
-                        let target = min(max(gesture.location.x / width, 0), 1) * duration
-                        dragValue = nil
-                        onSeek(target)
-                    }
-            )
-        }
-        .frame(height: 14)
     }
 }
 
@@ -399,8 +433,8 @@ private struct VolumeButton: View {
             isPresented.toggle()
         } label: {
             Icons.volume(muted: isMuted, low: volume < 0.34)
-                .foregroundColor(theme.text.opacity(isHovering ? 1 : 0.86))
-                .frame(width: 28, height: 28)
+                .foregroundColor(isHovering || isPresented ? theme.accent : theme.text.opacity(0.86))
+                .frame(width: 30, height: 30)
                 .background(
                     isHovering || isPresented ? theme.raisedFill : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -410,6 +444,7 @@ private struct VolumeButton: View {
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
         .help(isMuted ? "取消静音" : "音量")
+        .accessibilityLabel(isMuted ? "取消静音" : "音量")
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VolumePopover(
                 volume: $volume,
@@ -448,6 +483,7 @@ private struct VolumePopover: View {
             }
             .buttonStyle(.plain)
             .help(isMuted ? "取消静音" : "静音")
+            .accessibilityLabel(isMuted ? "取消静音" : "静音")
 
             Text("\(Int((volume * 100).rounded()))%")
                 .font(.system(size: 9.5))

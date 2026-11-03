@@ -182,24 +182,65 @@ extension View {
 
 // MARK: - Shared drawing
 
+/// Blurred desktop/window behind a clear window. Shared by the main window,
+/// the settings sheet, the mini player and the lyrics overlay.
+struct MaterialBackdrop: NSViewRepresentable {
+    var material: NSVisualEffectView.Material = .underWindowBackground
+    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        view.isEmphasized = false
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
 struct AppBackground: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
         ZStack {
+            // The window is clear; this is the glass the content floats on.
+            MaterialBackdrop()
+
             LinearGradient(
-                colors: [theme.backgroundTop, theme.backgroundMiddle, theme.backgroundBottom],
+                colors: [
+                    theme.backgroundTop.opacity(theme.isDark ? 0.70 : 0.80),
+                    theme.backgroundMiddle.opacity(theme.isDark ? 0.60 : 0.70),
+                    theme.backgroundBottom.opacity(theme.isDark ? 0.72 : 0.82),
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
+
+            // Ambient colour blobs, drawn once and never animated.
+            Circle()
+                .fill(theme.accent.opacity(theme.isDark ? 0.22 : 0.16))
+                .frame(width: 420, height: 420)
+                .blur(radius: 120)
+                .offset(x: -250, y: -210)
+            Circle()
+                .fill(theme.accentSecondary.opacity(theme.isDark ? 0.18 : 0.12))
+                .frame(width: 380, height: 380)
+                .blur(radius: 120)
+                .offset(x: 280, y: 170)
+
             RadialGradient(
-                colors: [theme.accent.opacity(theme.isDark ? 0.38 : 0.20), .clear],
+                colors: [theme.accent.opacity(theme.isDark ? 0.26 : 0.16), .clear],
                 center: UnitPoint(x: 0.12, y: 0.05),
                 startRadius: 0,
                 endRadius: 480
             )
             RadialGradient(
-                colors: [theme.accentSecondary.opacity(theme.isDark ? 0.24 : 0.14), .clear],
+                colors: [theme.accentSecondary.opacity(theme.isDark ? 0.18 : 0.12), .clear],
                 center: UnitPoint(x: 0.88, y: 0.22),
                 startRadius: 0,
                 endRadius: 420

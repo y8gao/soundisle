@@ -60,6 +60,7 @@ struct SettingsView: View {
         // minimized window can still present it; the content scrolls.
         .frame(width: 580, height: 560)
         .background(AppBackground())
+        .background(SheetWindowConfigurator())
         .soundIsleTheme(palette)
         .onAppear { model.refreshTranscodeCacheSize() }
     }
@@ -240,10 +241,10 @@ struct SettingsView: View {
             .foregroundColor(palette.text.opacity(0.82))
 
             HStack(spacing: 10) {
-                Text("背景不透明度")
+                Text("悬停背景不透明度")
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
-                    .frame(width: 92, alignment: .leading)
+                    .frame(width: 120, alignment: .leading)
                 Slider(
                     value: Binding(
                         get: { settings.lyricsOpacity },
@@ -507,4 +508,22 @@ struct SettingsView: View {
         NSApp.keyWindow?.makeFirstResponder(nil)
         return response == .alertFirstButtonReturn
     }
+}
+
+// MARK: - Sheet window
+
+/// A sheet is its own window; clearing it lets the `AppBackground` material
+/// blur the main window instead of painting an opaque sheet.
+private struct SheetWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.isOpaque = false
+            window.backgroundColor = .clear
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }

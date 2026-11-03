@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import SoundIsleCore
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// What the sidebar has selected. One value instead of a pile of booleans so
@@ -74,6 +75,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var showsFFmpegInstallPrompt = false
     @Published private(set) var transcodeCacheBytes: Int64 = 0
     @Published var isSettingsPresented = false
+    /// Main content area: track list or the full-window lyrics page. UI state
+    /// only; the desktop overlay and playback are unaffected.
+    @Published var showsLyricsPage = false
     /// Lyrics overlay state. Task 8 renders the overlay; the menu bar already
     /// drives these through the hooks below.
     @Published private(set) var isLyricsVisible = false
@@ -1326,6 +1330,14 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: - Lyrics
+
+    /// Clicks the player-bar cover: spring slide/fade between the list and the
+    /// now-playing lyrics page. The transition itself lives on the views.
+    func toggleLyricsPage() {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+            showsLyricsPage.toggle()
+        }
+    }
 
     func toggleLyricsVisibility() {
         setLyricsVisible(!isLyricsVisible)

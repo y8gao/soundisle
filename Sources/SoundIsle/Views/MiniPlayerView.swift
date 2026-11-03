@@ -36,9 +36,45 @@ struct MiniPlayerView: View {
         content
             .frame(width: MiniPlayerWindowController.size.width, height: MiniPlayerWindowController.size.height)
             .background(WindowDragArea())
-            .background(palette.panelTint.opacity(palette.isDark ? 0.55 : 0.78), in: capsule)
+            .background(palette.panelTint.opacity(palette.isDark ? 0.52 : 0.74), in: capsule)
             .background(.ultraThinMaterial, in: capsule)
-            .overlay(capsule.strokeBorder(palette.hairline, lineWidth: 1))
+            // Extra behind-window blur plus a faint accent wash for depth.
+            .background {
+                ZStack {
+                    MaterialBackdrop(material: .hudWindow)
+                    RadialGradient(
+                        colors: [palette.accent.opacity(palette.isDark ? 0.22 : 0.14), .clear],
+                        center: UnitPoint(x: 0.16, y: 0.1),
+                        startRadius: 0,
+                        endRadius: 220
+                    )
+                }
+                .clipShape(capsule)
+            }
+            .overlay(
+                capsule.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            palette.accent.opacity(0.55),
+                            palette.hairline,
+                            palette.accentSecondary.opacity(0.38),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+            )
+            .overlay(alignment: .top) {
+                LinearGradient(
+                    colors: [Color.white.opacity(palette.isDark ? 0.16 : 0.4), .clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 1)
+                .padding(.horizontal, 28)
+                .allowsHitTesting(false)
+            }
             .overlay(alignment: .bottom) { progressLine }
             .clipShape(capsule)
             .soundIsleTheme(palette)

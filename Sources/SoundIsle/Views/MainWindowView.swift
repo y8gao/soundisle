@@ -28,11 +28,23 @@ struct MainWindowView: View {
             HStack(spacing: 0) {
                 SidebarView(model: model)
                     .frame(width: 190)
-                TrackListView(model: model)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ZStack {
+                    if model.showsLyricsPage {
+                        NowPlayingLyricsView(model: model)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .bottom).combined(with: .opacity),
+                                removal: .opacity
+                            ))
+                    } else {
+                        TrackListView(model: model)
+                            .transition(.opacity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             }
             PlayerBarView(model: model)
-                .frame(height: 76)
+                .frame(height: 84)
         }
         .background(AppBackground())
         .soundIsleTheme(palette)
@@ -269,8 +281,11 @@ private struct WindowConfigurator: NSViewRepresentable {
             // dragging swallowed those gestures. The top bar carries its own
             // drag area instead.
             window.isMovableByWindowBackground = false
-            // Follows the effective NSApp appearance chosen by the theme mode.
-            window.backgroundColor = .windowBackgroundColor
+            // Clear so `AppBackground`'s under-window material shows the
+            // desktop through the glass. Text contrast comes from its tint.
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = true
             window.minSize = NSSize(width: 900, height: 600)
             window.setContentSize(NSSize(width: 900, height: 600))
             window.center()

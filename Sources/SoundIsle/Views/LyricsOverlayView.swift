@@ -37,14 +37,27 @@ struct LyricsOverlayView: View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
     }
 
+    /// The desktop overlay is text-only until the user hovers it. Locking
+    /// makes the panel click-through, so the glass must never appear then.
+    private var showsHoverChrome: Bool {
+        isHovering && !model.isLyricsLocked
+    }
+
+    private var hoverBackground: some View {
+        ZStack {
+            MaterialBackdrop(material: palette.isDark ? .hudWindow : .popover)
+            palette.playerTint.opacity(max(0.28, opacity))
+        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let fontSize = LyricsFont.size(forWidth: proxy.size.width)
             ZStack {
-                VisualEffectBackground(material: palette.isDark ? .hudWindow : .popover)
-                    .allowsHitTesting(false)
-                palette.playerTint
-                    .opacity(opacity)
+                hoverBackground
+                    .opacity(showsHoverChrome ? 1 : 0)
                     .allowsHitTesting(false)
                 WindowDragArea()
                 content(fontSize: fontSize)
@@ -57,10 +70,10 @@ struct LyricsOverlayView: View {
                 }
             }
             .clipShape(shape)
-            .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
             .contentShape(shape)
             .contextMenu { lyricsMenu }
             .onHover { isHovering = $0 }
+            .animation(.easeOut(duration: 0.18), value: showsHoverChrome)
         }
         .soundIsleTheme(palette)
         .onChange(of: model.library.settings.lyricsOpacity) { opacity = $0 }
@@ -212,7 +225,7 @@ struct LyricsOverlayView: View {
                     if !editing { model.setLyricsOpacity(opacity) }
                 })
                 .frame(width: 62)
-                .help("背景不透明度")
+                .help("悬停背景不透明度")
 
                 textButton(lineMode == "two" ? "双行" : "单行", help: "切换单行 / 双行") {
                     lineMode = lineMode == "two" ? "one" : "two"
@@ -232,9 +245,9 @@ struct LyricsOverlayView: View {
             .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 0.5))
             .padding(.bottom, 8)
         }
-        .opacity(isHovering ? 1 : 0)
-        .allowsHitTesting(isHovering)
-        .animation(.easeOut(duration: 0.15), value: isHovering)
+        .opacity(showsHoverChrome ? 1 : 0)
+        .allowsHitTesting(showsHoverChrome)
+        .animation(.easeOut(duration: 0.15), value: showsHoverChrome)
     }
 
     private var resizeGrip: some View {
@@ -247,8 +260,8 @@ struct LyricsOverlayView: View {
                     .padding(6)
             }
         }
-        .opacity(isHovering ? 0.55 : 0)
-        .allowsHitTesting(isHovering)
+        .opacity(showsHoverChrome ? 0.55 : 0)
+        .allowsHitTesting(showsHoverChrome)
     }
 
     private func controlButton(
@@ -289,24 +302,6 @@ struct LyricsOverlayView: View {
 }
 
 // MARK: - Window pieces
-
-/// Frosted backing. The SwiftUI tint above it carries `lyricsOpacity`.
-private struct VisualEffectBackground: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .active
-        view.isEmphasized = false
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-    }
-}
 
 /// Bottom-right grip. Native borderless resizing is available too, but the
 /// grip is an explicit, discoverable target.
