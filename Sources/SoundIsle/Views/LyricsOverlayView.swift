@@ -177,11 +177,11 @@ struct LyricsOverlayView: View {
         .disabled(model.currentTrack == nil || model.isResolvingLyrics)
     }
 
-    /// The fill follows the app theme's resolved accent; the halo still comes
-    /// from the **system** appearance (dark halo on a dark system, light on a
-    /// light one) so the line survives any wallpaper. macOS 12 has no native
-    /// text stroke, so the halo is drawn as offset copies plus a blur;
-    /// 「歌词描边」 thickens it.
+    /// The fill follows the app theme's resolved accent. The optional
+    /// 「歌词描边」 halo comes from the **system** appearance (dark halo on a
+    /// dark system, light on a light one) so the line survives busy
+    /// wallpapers. macOS 12 has no native text stroke, so the halo is drawn
+    /// as a soft blurred copy plus offset copies.
     private var lyricFill: Color {
         colorScheme == .dark ? palette.accentLight : palette.accent
     }
