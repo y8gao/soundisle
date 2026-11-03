@@ -12,10 +12,6 @@ struct MiniPlayerView: View {
     @Environment(\.colorScheme) private var colorScheme
     let onExpand: () -> Void
 
-    /// Hovering makes the capsule more opaque so the title, lyric and controls
-    /// stay readable; the resting state is deliberately see-through.
-    @State private var isHovering = false
-
     init(model: AppModel, onExpand: @escaping () -> Void) {
         self.model = model
         self.engine = model.engine
@@ -36,26 +32,12 @@ struct MiniPlayerView: View {
         RoundedRectangle(cornerRadius: 32, style: .continuous)
     }
 
-    private var tintOpacity: Double {
-        if palette.isDark {
-            return isHovering ? 0.52 : 0.12
-        }
-        return isHovering ? 0.66 : 0.20
-    }
-
-    /// Keeps the title and lyric readable while the resting capsule is
-    /// nearly transparent: a dark halo in dark mode, a light one in light.
-    private var textShadow: Color {
-        palette.isDark ? Color.black.opacity(0.55) : Color.white.opacity(0.75)
-    }
-
     var body: some View {
         content
             .frame(width: MiniPlayerWindowController.size.width, height: MiniPlayerWindowController.size.height)
             .background(WindowDragArea())
-            // No material behind the capsule: the desktop must read through
-            // the resting tint. Hover raises the tint for legibility.
-            .background(palette.panelTint.opacity(tintOpacity), in: capsule)
+            .background(palette.playerTint.opacity(palette.isDark ? 0.34 : 0.62), in: capsule)
+            .background(.ultraThinMaterial, in: capsule)
             .background {
                 RadialGradient(
                     colors: [palette.accent.opacity(palette.isDark ? 0.22 : 0.14), .clear],
@@ -92,8 +74,6 @@ struct MiniPlayerView: View {
             .overlay(alignment: .bottom) { progressLine }
             .clipShape(capsule)
             .soundIsleTheme(palette)
-            .animation(.easeOut(duration: 0.16), value: isHovering)
-            .onHover { isHovering = $0 }
     }
 
     private var content: some View {
@@ -106,12 +86,10 @@ struct MiniPlayerView: View {
                 Text(model.currentTrack?.title ?? "未在播放")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundColor(palette.text)
-                    .shadow(color: textShadow, radius: 2.5, y: 1)
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.mutedText(0.62))
-                    .shadow(color: textShadow, radius: 2.5, y: 1)
+                    .foregroundColor(palette.mutedText(0.55))
                     .lineLimit(1)
             }
             .frame(width: 126, alignment: .leading)

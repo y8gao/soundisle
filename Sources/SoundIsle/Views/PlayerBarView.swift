@@ -188,6 +188,12 @@ struct PlayerBarView: View {
             }
             .help(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
             .accessibilityLabel(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
+
+            PlayerIconButton(icon: Icons.symbol("rectangle.compress.vertical", size: 16), size: 30) {
+                model.showMiniPlayer()
+            }
+            .help("切换到迷你窗口")
+            .accessibilityLabel("切换到迷你窗口")
         }
     }
 }

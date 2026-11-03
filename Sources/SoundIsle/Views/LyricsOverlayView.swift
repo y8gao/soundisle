@@ -190,6 +190,7 @@ struct LyricsOverlayView: View {
         colorScheme == .dark ? .black : .white
     }
 
+    @ViewBuilder
     private func lyricText(
         _ text: String,
         size: CGFloat,
@@ -197,28 +198,26 @@ struct LyricsOverlayView: View {
         emphasis: Double = 1
     ) -> some View {
         let base = Text(text).font(.system(size: size, weight: weight))
-        let haloOpacity = outline ? 0.98 : 0.82
-        let haloBlur: CGFloat = outline ? 4.5 : 2.8
-        let ringScale: CGFloat = outline ? 1.0 : 0.85
-        return ZStack {
-            base
-                .foregroundColor(lyricHalo.opacity(haloOpacity))
-                .blur(radius: haloBlur)
-            ForEach(Array(Self.outlineOffsets.enumerated()), id: \.offset) { _, offset in
-                base
-                    .foregroundColor(lyricHalo.opacity(haloOpacity))
-                    .offset(
-                        x: offset.width * ringScale,
-                        y: offset.height * ringScale
-                    )
+        if outline {
+            // Opt-in outline for busy wallpapers: a soft halo plus offset
+            // copies in the contrast colour, not the old hard white ring.
+            let halo = lyricHalo.opacity(0.62)
+            ZStack {
+                base.foregroundColor(halo).blur(radius: 2.6)
+                ForEach(Array(Self.outlineOffsets.enumerated()), id: \.offset) { _, offset in
+                    base
+                        .foregroundColor(halo.opacity(0.75))
+                        .offset(x: offset.width, y: offset.height)
+                }
+                base.foregroundColor(lyricFill.opacity(emphasis))
             }
-            base.foregroundColor(lyricFill.opacity(emphasis))
+            .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        } else {
+            // Default: no ring. Accent text with a soft, understated shadow.
+            base
+                .foregroundColor(lyricFill.opacity(emphasis))
+                .shadow(color: .black.opacity(0.26), radius: 2.5, y: 1)
         }
-        .shadow(
-            color: lyricHalo.opacity(outline ? 0.55 : 0.4),
-            radius: outline ? 3 : 2,
-            y: 1
-        )
     }
 
     private static let outlineOffsets: [CGSize] = {
