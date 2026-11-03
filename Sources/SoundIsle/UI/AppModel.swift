@@ -1658,6 +1658,60 @@ final class AppModel: ObservableObject {
         return message
     }
 
+    /// 「重命名文件夹…」 in the sidebar. Moves the directory, rewrites the
+    /// index and playlists, then reloads the current track from its new URL.
+    @discardableResult
+    func renameFolder(_ folder: URL, to name: String) -> String {
+        let prefix = folder.standardizedFileURL.path + "/"
+        let playingTrack = currentTrack.flatMap { track in
+            track.url.standardizedFileURL.path.hasPrefix(prefix) ? track : nil
+        }
+        let wasPlaying = engine.isPlaying
+        let position = displayPosition
+
+        do {
+            let newURL = try library.renameFolder(at: folder, toName: name)
+            if case .folder(let selected) = selection,
+               selected.standardizedFileURL == folder.standardizedFileURL {
+                select(.folder(newURL))
+            }
+            refreshFromLibrary()
+            objectWillChange.send()
+            let message = "已将文件夹重命名为「\(newURL.lastPathComponent)」。"
+            statusMessage = message
+            // A reload failure is allowed to replace the success message.
+            if playingTrack != nil, let track = currentTrack {
+                reloadAfterFolderRename(track, wasPlaying: wasPlaying, position: position)
+            }
+            surfacePersistenceError()
+            return message
+        } catch {
+            let message = "重命名失败：\(error.localizedDescription)"
+            statusMessage = message
+            return message
+        }
+    }
+
+    /// The engine still holds the old path after the folder moved; reload the
+    /// same file from its new URL and put the playhead back. Best effort.
+    private func reloadAfterFolderRename(
+        _ track: Track,
+        wasPlaying: Bool,
+        position: TimeInterval
+    ) {
+        do {
+            try engine.load(url: track.url)
+            if position > 0 {
+                engine.seek(to: position)
+            }
+            if wasPlaying {
+                engine.play()
+            }
+        } catch {
+            statusMessage = "文件夹已重命名，但无法重新加载《\(track.title)》：\(engine.lastError ?? "未知错误")"
+        }
+    }
+
     /// Points a missing row at a new file. `updateTrackURLs` keeps the track
     /// ID, so playlist membership and undo history survive the relocation.
     @discardableResult
@@ -1674,15 +1728,29 @@ final class AppModel: ObservableObject {
         return message
     }
 
+    /// 「从音乐库移除」 for any row. Only the index and playlist references
+    /// change; the audio files stay on disk.
     @discardableResult
-    func removeMissingTrack(_ track: Track) -> String {
-        library.removeTrack(id: track.id)
+    func removeTracksFromLibrary(_ trackIDs: [UUID]) -> String {
+        let ids = Set(trackIDs)
+        guard !ids.isEmpty else { return "" }
+        let title = ids.count == 1
+            ? ids.first.flatMap { id in tracks.first { $0.id == id }?.title }
+            : nil
+        library.removeTracks(ids: ids)
         refreshFromLibrary()
         objectWillChange.send()
         surfacePersistenceError()
-        let message = "已移除《\(track.title)》。"
+        let message = title.map { "已从音乐库移除《\($0)》，文件仍保留在磁盘上。" }
+            ?? "已从音乐库移除 \(ids.count) 首歌曲，文件仍保留在磁盘上。"
         statusMessage = message
         return message
+    }
+
+    /// Settings → missing-file 「移除」 reuses the same core path.
+    @discardableResult
+    func removeMissingTrack(_ track: Track) -> String {
+        removeTracksFromLibrary([track.id])
     }
 
     private func saveSettingsAndNotify() {
@@ -1723,7 +1791,7 @@ final class AppModel: ObservableObject {
            !ids.contains(id) {
             ids.insert(id, at: 0)
         }
-        let mode = PlaybackMode(rawValue: settings.playbackMode) ?? .sequential
+        let mode = PlaybackMode(rawValue: settings.playbackMode) ?? .repeatAll
         let currentIndex = settings.lastTrackID.flatMap { ids.firstIndex(of: $0) } ?? 0
         queue = PlaybackQueue(trackIDs: ids, currentIndex: currentIndex, mode: mode)
 

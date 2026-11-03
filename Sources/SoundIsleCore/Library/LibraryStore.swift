@@ -1,5 +1,21 @@
 import Foundation
 
+/// Why a folder rename was refused. Messages are user-facing (Chinese) so the
+/// caller can surface `localizedDescription` directly.
+public enum FolderRenameError: LocalizedError {
+    case invalidName
+    case destinationExists(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidName:
+            return "文件夹名称不能为空，也不能包含“/”或“:”。"
+        case .destinationExists(let name):
+            return "已存在同名文件夹：\(name)。"
+        }
+    }
+}
+
 /// Owns the in-memory library and persists it through `IndexStore`.
 /// Rescans are incremental: unchanged files keep their `Track` untouched,
 /// changed files keep their `id`, and vanished files stay in the index marked
@@ -135,6 +151,68 @@ public final class LibraryStore {
         removeTracks { $0.url.standardizedFileURL.path.hasPrefix(prefix) }
     }
 
+    /// Renames an imported folder on disk and rewrites every URL that lived
+    /// under it. Track IDs, metadata and playlist membership are preserved,
+    /// so the rename is invisible to playback history.
+    ///
+    /// The directory move happens first; if persisting the updated index
+    /// fails, the move is rolled back so disk and index stay in sync.
+    @discardableResult
+    public func renameFolder(at url: URL, toName name: String) throws -> URL {
+        let source = url.standardizedFileURL
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed != ".",
+              trimmed != "..",
+              !trimmed.contains("/"),
+              !trimmed.contains(":") else {
+            throw FolderRenameError.invalidName
+        }
+        let destination = source.deletingLastPathComponent()
+            .appendingPathComponent(trimmed, isDirectory: true)
+        guard !manager.fileExists(atPath: destination.path) else {
+            throw FolderRenameError.destinationExists(trimmed)
+        }
+
+        try manager.moveItem(at: source, to: destination)
+
+        let sourcePrefix = source.path + "/"
+        let destinationPrefix = destination.path + "/"
+        func relocated(_ url: URL) -> URL? {
+            let path = url.standardizedFileURL.path
+            guard path.hasPrefix(sourcePrefix) else { return nil }
+            return URL(fileURLWithPath: destinationPrefix + path.dropFirst(sourcePrefix.count))
+        }
+
+        let originalIndex = index
+        let originalUnreadable = unreadableURLs
+
+        if let position = index.folders.firstIndex(where: { $0.standardizedFileURL == source }) {
+            index.folders[position] = destination
+        }
+        for position in index.tracks.indices {
+            if let newURL = relocated(index.tracks[position].url) {
+                index.tracks[position].url = newURL
+            }
+        }
+        unreadableURLs = unreadableURLs.map { relocated($0) ?? $0 }
+
+        do {
+            // Atomic write; throws before touching the current file if the
+            // temporary copy cannot be written.
+            try store.saveIndex(index)
+            lastError = nil
+        } catch {
+            index = originalIndex
+            unreadableURLs = originalUnreadable
+            try? manager.moveItem(at: destination, to: source)
+            lastError = error
+            throw error
+        }
+        savePlaylists()
+        return destination
+    }
+
     public func rescan(reader: MetadataReading = AVFoundationMetadataReader()) async {
         await rescan(folders: index.folders, scoped: false, reader: reader)
     }
@@ -177,12 +255,14 @@ public final class LibraryStore {
         }
 
         var scannedPaths = Set<String>()
+        var newPaths = Set<String>()
         var kept: [Track] = []
         var rebuild: [Track] = []
         for scanned in result.tracks {
             let path = scanned.url.standardizedFileURL.path
             scannedPaths.insert(path)
             guard let existing = existingByPath.removeValue(forKey: path) else {
+                newPaths.insert(path)
                 rebuild.append(scanned)
                 continue
             }
@@ -196,6 +276,49 @@ public final class LibraryStore {
                 updated.artworkFileName = existing.artworkFileName
                 rebuild.append(updated)
             }
+        }
+
+        // Rename/move detection: a vanished row whose file size *and*
+        // modification date match exactly one newly discovered path is the
+        // same file under a new name. Reusing the row keeps its id, metadata
+        // and playlist entries, and suppresses the new path as a duplicate.
+        // Zero or several candidates leave the old row missing (ambiguous).
+        struct FileFingerprint: Hashable {
+            let size: Int64
+            let modified: Date
+        }
+        func fingerprint(_ track: Track) -> FileFingerprint {
+            FileFingerprint(size: track.fileSize, modified: track.modifiedAt)
+        }
+
+        var newByFingerprint: [FileFingerprint: [String]] = [:]
+        var newTrackByPath: [String: Track] = [:]
+        for track in rebuild where newPaths.contains(track.url.standardizedFileURL.path) {
+            let path = track.url.standardizedFileURL.path
+            newByFingerprint[fingerprint(track), default: []].append(path)
+            newTrackByPath[path] = track
+        }
+        var missingByFingerprint: [FileFingerprint: [UUID]] = [:]
+        for track in index.tracks {
+            let path = track.url.standardizedFileURL.path
+            guard !scannedPaths.contains(path),
+                  inScope(track.url),
+                  !unreadablePaths.contains(path) else { continue }
+            missingByFingerprint[fingerprint(track), default: []].append(track.id)
+        }
+        var renamedURLs: [UUID: URL] = [:]
+        var consumedPaths = Set<String>()
+        for (key, paths) in newByFingerprint {
+            guard paths.count == 1,
+                  let missing = missingByFingerprint[key],
+                  missing.count == 1,
+                  let id = missing.first,
+                  let track = newTrackByPath[paths[0]] else { continue }
+            renamedURLs[id] = track.url
+            consumedPaths.insert(paths[0])
+        }
+        if !consumedPaths.isEmpty {
+            rebuild.removeAll { consumedPaths.contains($0.url.standardizedFileURL.path) }
         }
 
         // `ScanResult` only carries `Track`, which drops embedded artwork, so
@@ -213,10 +336,13 @@ public final class LibraryStore {
         var tracks = kept + rebuilt
         for track in index.tracks where !scannedPaths.contains(track.url.standardizedFileURL.path) {
             var track = track
-            // A folder-scoped rescan only judges files it actually scanned;
-            // everything outside the folder is carried over untouched.
-            if inScope(track.url),
-               !unreadablePaths.contains(track.url.standardizedFileURL.path) {
+            if let newURL = renamedURLs[track.id] {
+                track.url = newURL
+                track.isMissing = false
+            } else if inScope(track.url),
+                      !unreadablePaths.contains(track.url.standardizedFileURL.path) {
+                // A folder-scoped rescan only judges files it actually
+                // scanned; everything outside the folder is carried over.
                 track.isMissing = true
             }
             tracks.append(track)
@@ -298,6 +424,12 @@ public final class LibraryStore {
     /// playlist entries that pointed at it.
     public func removeTrack(id: UUID) {
         removeTracks { $0.id == id }
+    }
+
+    /// Removes several rows in one save. Files on disk are never touched.
+    public func removeTracks(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        removeTracks { ids.contains($0.id) }
     }
 
     // MARK: - Private

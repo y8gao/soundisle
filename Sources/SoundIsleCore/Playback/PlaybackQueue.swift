@@ -17,7 +17,7 @@ public struct PlaybackQueue {
     private var shuffleOrder: [UUID] = []
     private var shuffleCursor = 0
 
-    public init(trackIDs: [UUID], currentIndex: Int = 0, mode: PlaybackMode = .sequential) {
+    public init(trackIDs: [UUID], currentIndex: Int = 0, mode: PlaybackMode = .repeatAll) {
         self.trackIDs = trackIDs
         self.index = trackIDs.isEmpty ? 0 : min(max(currentIndex, 0), trackIDs.count - 1)
         self.mode = mode

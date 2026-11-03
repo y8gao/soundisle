@@ -8,17 +8,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private let model: AppModel
     private let miniPlayer: MiniPlayerWindowController
     private let showMainWindow: () -> Void
+    private let showMiniPlayer: () -> Void
     private let menu = NSMenu()
     private let statusItem: NSStatusItem
 
     init(
         model: AppModel,
         miniPlayer: MiniPlayerWindowController,
-        showMainWindow: @escaping () -> Void
+        showMainWindow: @escaping () -> Void,
+        showMiniPlayer: @escaping () -> Void
     ) {
         self.model = model
         self.miniPlayer = miniPlayer
         self.showMainWindow = showMainWindow
+        self.showMiniPlayer = showMiniPlayer
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -49,7 +52,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         addItem("下一首", action: #selector(next))
         menu.addItem(.separator())
 
-        addItem(miniPlayer.isVisible ? "隐藏迷你窗" : "显示迷你窗", action: #selector(toggleMiniPlayer))
+        // One toggle instead of two items: the mini and the main window are
+        // mutually exclusive, so the label names the destination.
+        if miniPlayer.isVisible {
+            addItem("返回主窗口", action: #selector(showMainFromMenu))
+        } else {
+            addItem("迷你模式", action: #selector(showMiniFromMenu))
+        }
         menu.addItem(.separator())
 
         addItem(model.isLyricsVisible ? "隐藏歌词" : "显示歌词", action: #selector(toggleLyrics))
@@ -63,7 +72,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
-        addItem("显示主窗口", action: #selector(showMainWindowItem))
         addItem("退出声屿", action: #selector(quit), keyEquivalent: "q")
     }
 
@@ -99,8 +107,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         model.next()
     }
 
-    @objc private func toggleMiniPlayer() {
-        miniPlayer.toggle()
+    @objc private func showMainFromMenu() {
+        showMainWindow()
+    }
+
+    @objc private func showMiniFromMenu() {
+        showMiniPlayer()
     }
 
     @objc private func toggleLyrics() {
@@ -121,10 +133,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func retryLyrics() {
         model.retryLyrics()
-    }
-
-    @objc private func showMainWindowItem() {
-        showMainWindow()
     }
 
     @objc private func quit() {

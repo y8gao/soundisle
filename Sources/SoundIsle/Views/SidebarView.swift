@@ -48,6 +48,9 @@ struct SidebarView: View {
                                 },
                                 onRemove: { confirmRemoveFolder(folder) }
                             )
+                            .contextMenu {
+                                Button("重命名文件夹…") { promptRenameFolder(folder) }
+                            }
                         }
                     }
 
@@ -185,6 +188,25 @@ struct SidebarView: View {
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .alertFirstButtonReturn else { return }
         model.removeFolder(folder)
+    }
+
+    /// Renames the directory on disk; the core validates the name and refuses
+    /// to overwrite an existing folder. Failures surface in the status banner.
+    private func promptRenameFolder(_ folder: URL) {
+        let alert = NSAlert()
+        alert.messageText = "重命名文件夹"
+        alert.informativeText = "输入新的文件夹名称，磁盘上的音频文件不会被删除。"
+        alert.addButton(withTitle: "重命名")
+        alert.addButton(withTitle: "取消")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        field.stringValue = folder.lastPathComponent
+        field.placeholderString = "文件夹名称"
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        let response = alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .alertFirstButtonReturn else { return }
+        model.renameFolder(folder, to: field.stringValue)
     }
 
     private func sectionLabel(_ title: String) -> some View {

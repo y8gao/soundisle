@@ -48,7 +48,7 @@ struct SettingsView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     tagEditingSection
-                    foldersSection
+                    missingFilesSection
                     cacheSection
                     lyricsSection
                     appearanceSection
@@ -97,77 +97,77 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Folders, missing and unreadable files
+    // MARK: - Missing and unreadable files
 
-    private var foldersSection: some View {
-        sectionCard(icon: Icons.settingsFolders, title: "音乐文件夹") {
-            Text("在左侧栏管理导入文件夹")
-                .font(.system(size: 11))
-                .foregroundColor(palette.mutedText(0.5))
-
-            let missing = model.library.missingTracks
-            if !missing.isEmpty {
-                Divider().overlay(palette.hairline)
-                HStack(spacing: 8) {
-                    Text("缺失文件 \(missing.count) 首")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(palette.warning)
-                    Spacer(minLength: 8)
-                    Button("移除缺失条目") {
-                        folderNotice = model.removeMissingTracks()
+    /// Folder management lives in the sidebar; this card only surfaces files
+    /// the scanner could not find or read, and hides itself when there are none.
+    @ViewBuilder
+    private var missingFilesSection: some View {
+        let missing = model.library.missingTracks
+        let unreadable = model.library.unreadableURLs
+        if !missing.isEmpty || !unreadable.isEmpty || folderNotice != nil {
+            sectionCard(icon: Icons.settingsFolders, title: "文件状态") {
+                if !missing.isEmpty {
+                    HStack(spacing: 8) {
+                        Text("缺失文件 \(missing.count) 首")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(palette.warning)
+                        Spacer(minLength: 8)
+                        Button("移除缺失条目") {
+                            folderNotice = model.removeMissingTracks()
+                        }
+                    }
+                    ForEach(missing) { track in
+                        HStack(spacing: 8) {
+                            Text("\(track.title) — \(track.url.lastPathComponent)")
+                                .font(.system(size: 10.5))
+                                .foregroundColor(palette.mutedText(0.45))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .help(track.url.path)
+                            Spacer(minLength: 6)
+                            Button("重新定位…") {
+                                relocate(track)
+                            }
+                            .help("选择这个文件的新位置")
+                            if FileManager.default.fileExists(atPath: track.url.path) {
+                                Button("在 Finder 中显示") {
+                                    NSWorkspace.shared.activateFileViewerSelecting([track.url])
+                                }
+                            }
+                            Button("移除") {
+                                folderNotice = model.removeMissingTrack(track)
+                            }
+                        }
+                        .font(.system(size: 10.5))
                     }
                 }
-                ForEach(missing) { track in
-                    HStack(spacing: 8) {
-                        Text("\(track.title) — \(track.url.lastPathComponent)")
+
+                if !unreadable.isEmpty {
+                    Divider().overlay(palette.hairline)
+                    Text("无法读取 \(unreadable.count) 个文件")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(palette.warning)
+                    ForEach(unreadable.prefix(3), id: \.self) { url in
+                        Text(url.lastPathComponent)
                             .font(.system(size: 10.5))
                             .foregroundColor(palette.mutedText(0.45))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                            .help(track.url.path)
-                        Spacer(minLength: 6)
-                        Button("重新定位…") {
-                            relocate(track)
-                        }
-                        .help("选择这个文件的新位置")
-                        if FileManager.default.fileExists(atPath: track.url.path) {
-                            Button("在 Finder 中显示") {
-                                NSWorkspace.shared.activateFileViewerSelecting([track.url])
-                            }
-                        }
-                        Button("移除") {
-                            folderNotice = model.removeMissingTrack(track)
-                        }
                     }
-                    .font(.system(size: 10.5))
+                    if unreadable.count > 3 {
+                        Text("另有 \(unreadable.count - 3) 个…")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(palette.mutedText(0.35))
+                    }
                 }
-            }
 
-            let unreadable = model.library.unreadableURLs
-            if !unreadable.isEmpty {
-                Divider().overlay(palette.hairline)
-                Text("无法读取 \(unreadable.count) 个文件")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(palette.warning)
-                ForEach(unreadable.prefix(3), id: \.self) { url in
-                    Text(url.lastPathComponent)
+                if let folderNotice {
+                    Text(folderNotice)
                         .font(.system(size: 10.5))
-                        .foregroundColor(palette.mutedText(0.45))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .foregroundColor(palette.accentLight)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                if unreadable.count > 3 {
-                    Text("另有 \(unreadable.count - 3) 个…")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(palette.mutedText(0.35))
-                }
-            }
-
-            if let folderNotice {
-                Text(folderNotice)
-                    .font(.system(size: 10.5))
-                    .foregroundColor(palette.accentLight)
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

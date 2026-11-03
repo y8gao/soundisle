@@ -185,11 +185,28 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertTrue(settings.keepRunningOnClose)
         XCTAssertTrue(settings.miniAlwaysOnTop)
         XCTAssertTrue(settings.onlineLyricsEnabled)
-        XCTAssertEqual(settings.playbackMode, "sequential")
+        XCTAssertEqual(settings.playbackMode, "repeatAll")
         XCTAssertEqual(settings.lastQueue, [])
         XCTAssertNil(settings.lastTrackID)
         XCTAssertEqual(settings.lastPosition, 0)
         XCTAssertNil(settings.ffmpegPath)
+    }
+
+    func testLegacySequentialPlaybackModeMigratesToRepeatAll() throws {
+        let legacy = try JSONDecoder().decode(
+            AppSettings.self,
+            from: Data(#"{"playbackMode":"sequential"}"#.utf8)
+        )
+        XCTAssertEqual(legacy.playbackMode, "repeatAll")
+
+        let missing = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
+        XCTAssertEqual(missing.playbackMode, "repeatAll")
+
+        let current = try JSONDecoder().decode(
+            AppSettings.self,
+            from: Data(#"{"playbackMode":"shuffle"}"#.utf8)
+        )
+        XCTAssertEqual(current.playbackMode, "shuffle")
     }
 
     func testCorruptIndexReturnsEmptyAndLeavesEverythingElseIntact() throws {
@@ -616,5 +633,156 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertTrue(store.index.folders.contains {
             $0.standardizedFileURL == newFolder.standardizedFileURL
         })
+    }
+
+    // MARK: - Folder rename
+
+    @MainActor
+    func testRenameFolderMovesDirectoryAndRewritesTrackURLs() async throws {
+        let oldFolder = try makeSubfolder("旧文件夹")
+        try makeFile("曲目.mp3", in: oldFolder)
+        let reader = StubReader()
+        reader.setMetadata(["曲目.mp3": AudioMetadata(title: "曲目", artist: "歌手", duration: 10)])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(oldFolder, reader: reader)
+        let original = try track(named: "曲目", in: store)
+        store.playlists = [Playlist(name: "收藏", trackIDs: [original.id])]
+
+        let newFolder = try store.renameFolder(at: oldFolder, toName: "新文件夹")
+
+        XCTAssertFalse(fm.fileExists(atPath: oldFolder.path))
+        XCTAssertTrue(fm.fileExists(atPath: newFolder.appendingPathComponent("曲目.mp3").path))
+        XCTAssertEqual(store.index.folders.map(\.standardizedFileURL), [newFolder.standardizedFileURL])
+        let renamed = try track(named: "曲目", in: store)
+        XCTAssertEqual(renamed.id, original.id)
+        XCTAssertEqual(renamed.artist, "歌手")
+        XCTAssertEqual(
+            renamed.url.standardizedFileURL,
+            newFolder.appendingPathComponent("曲目.mp3").standardizedFileURL
+        )
+        XCTAssertEqual(store.playlists.count, 1)
+        XCTAssertEqual(store.playlists.first?.name, "收藏")
+        XCTAssertEqual(store.playlists.first?.trackIDs, [original.id])
+
+        let persisted = persistedIndex()
+        XCTAssertEqual(persisted.folders.map(\.standardizedFileURL), [newFolder.standardizedFileURL])
+        XCTAssertEqual(
+            persisted.tracks.first?.url.standardizedFileURL,
+            newFolder.appendingPathComponent("曲目.mp3").standardizedFileURL
+        )
+        XCTAssertEqual(persisted.tracks.first?.id, original.id)
+        XCTAssertEqual(
+            IndexStore(directory: dataDir).loadPlaylists().first?.trackIDs,
+            [original.id]
+        )
+    }
+
+    @MainActor
+    func testRenameFolderRejectsExistingTargetAndLeavesEverythingUntouched() async throws {
+        let oldFolder = try makeSubfolder("甲")
+        let existing = try makeSubfolder("乙")
+        try makeFile("曲.mp3", in: oldFolder)
+        let reader = StubReader()
+        reader.setMetadata(["曲.mp3": AudioMetadata(title: "曲", duration: 10)])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(oldFolder, reader: reader)
+        let foldersBefore = store.index.folders.map(\.standardizedFileURL)
+        let urlsBefore = store.index.tracks.map(\.url)
+
+        XCTAssertThrowsError(try store.renameFolder(at: oldFolder, toName: "乙"))
+
+        XCTAssertTrue(fm.fileExists(atPath: oldFolder.path))
+        XCTAssertTrue(fm.fileExists(atPath: existing.path))
+        XCTAssertEqual(store.index.folders.map(\.standardizedFileURL), foldersBefore)
+        XCTAssertEqual(store.index.tracks.map(\.url), urlsBefore)
+    }
+
+    @MainActor
+    func testRenameFolderRejectsInvalidNames() async throws {
+        let folder = try makeSubfolder("甲")
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(folder, reader: StubReader())
+
+        for name in ["", "   ", "a/b", "a:b", ".", ".."] {
+            XCTAssertThrowsError(try store.renameFolder(at: folder, toName: name))
+        }
+        XCTAssertTrue(fm.fileExists(atPath: folder.path))
+    }
+
+    // MARK: - Rescan rename detection
+
+    @MainActor
+    func testRescanDetectsRenamedFileAndKeepsIDMetadataAndPlaylist() async throws {
+        let oldURL = try makeFile("旧名.mp3", bytes: 48)
+        let reader = StubReader()
+        reader.setMetadata(["旧名.mp3": AudioMetadata(title: "旧名", artist: "甲", duration: 10)])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(libraryRoot, reader: reader)
+        let original = try track(named: "旧名", in: store)
+        store.playlists = [Playlist(name: "收藏", trackIDs: [original.id])]
+
+        let newURL = libraryRoot.appendingPathComponent("新名.mp3")
+        try fm.moveItem(at: oldURL, to: newURL)
+        reader.setMetadata(["新名.mp3": AudioMetadata(title: "新名", artist: "甲", duration: 30)])
+        await store.rescan(reader: reader)
+
+        XCTAssertEqual(store.index.tracks.count, 1)
+        let renamed = try XCTUnwrap(store.index.tracks.first)
+        XCTAssertEqual(renamed.id, original.id)
+        XCTAssertEqual(renamed.url.standardizedFileURL, newURL.standardizedFileURL)
+        XCTAssertEqual(renamed.title, "旧名")
+        XCTAssertEqual(renamed.duration, 10)
+        XCTAssertFalse(renamed.isMissing)
+        XCTAssertTrue(store.missingTracks.isEmpty)
+        XCTAssertEqual(store.playlists.first?.trackIDs, [original.id])
+    }
+
+    @MainActor
+    func testRescanLeavesMissingRowWhenRenameMatchIsAmbiguous() async throws {
+        let oldURL = try makeFile("原名.mp3", bytes: 40)
+        let mtime = try XCTUnwrap(
+            fm.attributesOfItem(atPath: oldURL.path)[.modificationDate] as? Date
+        )
+        let reader = StubReader()
+        reader.setMetadata(["原名.mp3": AudioMetadata(title: "原名", duration: 10)])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(libraryRoot, reader: reader)
+
+        try fm.removeItem(at: oldURL)
+        for name in ["候选甲.mp3", "候选乙.mp3"] {
+            let url = try makeFile(name, bytes: 40)
+            try fm.setAttributes([.modificationDate: mtime], ofItemAtPath: url.path)
+        }
+        reader.setMetadata([
+            "候选甲.mp3": AudioMetadata(title: "候选甲", duration: 10),
+            "候选乙.mp3": AudioMetadata(title: "候选乙", duration: 10),
+        ])
+        await store.rescan(reader: reader)
+
+        XCTAssertEqual(store.index.tracks.count, 3)
+        let original = try track(named: "原名", in: store)
+        XCTAssertTrue(original.isMissing)
+        XCTAssertEqual(store.missingTracks.map(\.id), [original.id])
+    }
+
+    // MARK: - Remove from library
+
+    @MainActor
+    func testRemoveTrackFromLibraryKeepsFileOnDisk() async throws {
+        let url = try makeFile("保留文件.mp3")
+        let reader = StubReader()
+        reader.setMetadata(["保留文件.mp3": AudioMetadata(title: "保留文件", duration: 10)])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(libraryRoot, reader: reader)
+        let id = try track(named: "保留文件", in: store).id
+        store.playlists = [Playlist(name: "收藏", trackIDs: [id])]
+
+        store.removeTracks(ids: [id])
+
+        XCTAssertTrue(store.index.tracks.isEmpty)
+        XCTAssertEqual(store.playlists.first?.trackIDs, [])
+        XCTAssertTrue(fm.fileExists(atPath: url.path))
+        XCTAssertTrue(persistedIndex().tracks.isEmpty)
+        XCTAssertEqual(IndexStore(directory: dataDir).loadPlaylists().first?.trackIDs, [])
     }
 }

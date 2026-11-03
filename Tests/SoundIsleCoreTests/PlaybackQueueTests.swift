@@ -6,6 +6,10 @@ final class PlaybackQueueTests: XCTestCase {
     private let b = UUID()
     private let c = UUID()
 
+    func testDefaultModeIsRepeatAll() {
+        XCTAssertEqual(PlaybackQueue(trackIDs: [a, b]).mode, .repeatAll)
+    }
+
     func testSequentialStopsAtEnd() {
         var q = PlaybackQueue(trackIDs: [a, b], mode: .sequential)
         XCTAssertEqual(q.next(), b)

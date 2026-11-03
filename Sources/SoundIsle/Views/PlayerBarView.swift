@@ -93,8 +93,9 @@ struct PlayerBarView: View {
 
     // MARK: Playback modes
 
-    /// One button instead of four: click cycles sequential → repeat-all →
-    /// repeat-one → shuffle, and the glyph/help always show the current mode.
+    /// One button instead of four: click cycles repeat-all → repeat-one →
+    /// shuffle, and the glyph/help always show the current mode. A legacy
+    /// `.sequential` queue (old settings) jumps straight to repeat-all.
     private var modeIcon: Image {
         switch model.queue.mode {
         case .sequential: return Icons.sequential
@@ -114,8 +115,11 @@ struct PlayerBarView: View {
     }
 
     private func cyclePlaybackMode() {
-        let order: [PlaybackMode] = [.sequential, .repeatAll, .repeatOne, .shuffle]
-        let index = order.firstIndex(of: model.queue.mode) ?? 0
+        let order: [PlaybackMode] = [.repeatAll, .repeatOne, .shuffle]
+        guard let index = order.firstIndex(of: model.queue.mode) else {
+            model.setPlaybackMode(.repeatAll)
+            return
+        }
         model.setPlaybackMode(order[(index + 1) % order.count])
     }
 

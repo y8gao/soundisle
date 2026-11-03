@@ -536,6 +536,9 @@ private struct TrackContextMenu: View {
             action("folder", "整理文件…") {
                 model.beginOrganize(trackIDs: targetIDs)
             }
+            action("trash", "从音乐库移除") {
+                model.removeTracksFromLibrary(targetIDs)
+            }
 
             separator
 

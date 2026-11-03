@@ -30,9 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.lyricsOverlay = lyricsOverlay
         self.lyricsOverlay = lyricsOverlay
 
-        menuBar = MenuBarController(model: model, miniPlayer: miniPlayer) { [weak self] in
-            self?.showMainWindow()
-        }
+        menuBar = MenuBarController(
+            model: model,
+            miniPlayer: miniPlayer,
+            showMainWindow: { [weak self] in self?.showMainWindow() },
+            showMiniPlayer: { [weak self] in self?.showMiniPlayer() }
+        )
         mediaKeys = MediaKeyController(model: model)
 
         NotificationCenter.default.addObserver(
@@ -67,7 +70,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.savePlaybackState()
     }
 
+    /// Main window and mini player are mutually exclusive: whichever is
+    /// summoned hides the other. Closing still honors `keepRunningOnClose`
+    /// because `WindowConfigurator` hides rather than destroys the window.
     func showMainWindow() {
+        miniPlayer?.hide()
         NSApp.activate(ignoringOtherApps: true)
         if let window = mainWindow ?? NSApp.windows.first(where: { isMainWindow($0) }) {
             mainWindow = window
@@ -78,6 +85,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // only AppKit-safe way to ask for one on macOS 12.
             NSApp.sendAction(Selector(("newWindow:")), to: nil, from: nil)
         }
+    }
+
+    /// Mini mode: order the main window out (without closing it) and float the
+    /// mini player. Returning to the main window goes through `showMainWindow`.
+    func showMiniPlayer() {
+        if let window = mainWindow ?? NSApp.windows.first(where: { isMainWindow($0) }) {
+            mainWindow = window
+            window.orderOut(nil)
+        }
+        miniPlayer?.show()
     }
 
     // MARK: - Main window tracking

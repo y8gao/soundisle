@@ -14,7 +14,7 @@ public struct AppSettings: Codable, Equatable {
     public var keepRunningOnClose: Bool = true
     public var miniAlwaysOnTop: Bool = true
     public var onlineLyricsEnabled: Bool = true
-    public var playbackMode: String = "sequential"
+    public var playbackMode: String = "repeatAll"
     public var lastQueue: [UUID] = []
     public var lastTrackID: UUID?
     public var lastPosition: TimeInterval = 0
@@ -39,7 +39,10 @@ public struct AppSettings: Codable, Equatable {
         keepRunningOnClose = try container.decodeIfPresent(Bool.self, forKey: .keepRunningOnClose) ?? true
         miniAlwaysOnTop = try container.decodeIfPresent(Bool.self, forKey: .miniAlwaysOnTop) ?? true
         onlineLyricsEnabled = try container.decodeIfPresent(Bool.self, forKey: .onlineLyricsEnabled) ?? true
-        playbackMode = try container.decodeIfPresent(String.self, forKey: .playbackMode) ?? "sequential"
+        // Sequential playback was removed from the UI; a settings file written
+        // by an older version migrates to repeat-all on load.
+        let storedMode = try container.decodeIfPresent(String.self, forKey: .playbackMode) ?? "repeatAll"
+        playbackMode = storedMode == "sequential" ? "repeatAll" : storedMode
         lastQueue = try container.decodeIfPresent([UUID].self, forKey: .lastQueue) ?? []
         lastTrackID = try container.decodeIfPresent(UUID.self, forKey: .lastTrackID)
         lastPosition = try container.decodeIfPresent(TimeInterval.self, forKey: .lastPosition) ?? 0
