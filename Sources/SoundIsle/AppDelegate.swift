@@ -90,11 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Mini mode: order the main window out (without closing it) and float the
     /// mini player. Returning to the main window goes through `showMainWindow`.
     func showMiniPlayer() {
-        if let window = mainWindow ?? NSApp.windows.first(where: { isMainWindow($0) }) {
-            mainWindow = window
-            window.orderOut(nil)
-        }
-        miniPlayer?.show()
+        model.showMiniPlayer()
     }
 
     // MARK: - Main window tracking

@@ -26,10 +26,10 @@ enum Icons {
     static var pause: Image { symbol("pause.fill") }
     static var previous: Image { symbol("backward.end") }
     static var next: Image { symbol("forward.end") }
-    static var sequential: Image { symbol("arrow.right", size: 13) }
-    static var repeatAll: Image { symbol("repeat", size: 13) }
-    static var repeatOne: Image { symbol("repeat.1", size: 13) }
-    static var shuffle: Image { symbol("shuffle", size: 13) }
+    static var sequential: Image { symbol("arrow.right", size: 18) }
+    static var repeatAll: Image { symbol("repeat", size: 18) }
+    static var repeatOne: Image { symbol("repeat.1", size: 18) }
+    static var shuffle: Image { symbol("shuffle", size: 18) }
 
     // Player bar
     static func volume(muted: Bool = false, low: Bool = false, size: CGFloat = 18) -> Image {

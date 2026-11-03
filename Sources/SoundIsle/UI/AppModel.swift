@@ -1344,6 +1344,16 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Switches to the mini player from anywhere in the UI. Every main
+    /// window (not the floating lyrics/mini panels) is ordered out; returning
+    /// still goes through the menu bar or the mini player's expand button.
+    func showMiniPlayer() {
+        for window in NSApp.windows where !(window is NSPanel) && window.canBecomeMain {
+            window.orderOut(nil)
+        }
+        miniPlayer?.show()
+    }
+
     func toggleLyricsVisibility() {
         setLyricsVisible(!isLyricsVisible)
     }

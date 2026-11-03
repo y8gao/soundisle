@@ -175,7 +175,7 @@ struct PlayerBarView: View {
 
     private var rightControls: some View {
         HStack(spacing: 8) {
-            PlayerIconButton(icon: modeIcon, size: 30) {
+            PlayerIconButton(icon: modeIcon, size: 32) {
                 cyclePlaybackMode()
             }
             .help(modeHelp)
@@ -268,6 +268,7 @@ private struct PlayerProgressLine: View {
                 ? min(max(shown / shownDuration, 0), 1)
                 : 0
             let active = isHovering || dragValue != nil
+            let band: CGFloat = 6
             let lineHeight: CGFloat = active ? 6 : 3
             let knob: CGFloat = active ? 12 : 9
             let knobX = min(
@@ -276,13 +277,18 @@ private struct PlayerProgressLine: View {
             )
 
             ZStack(alignment: .topLeading) {
+                // The line lives in a 6pt band and grows around its centre,
+                // so hover expands 1.5pt up and 1.5pt down instead of
+                // pushing the whole strip down from the top edge.
                 Rectangle()
                     .fill(theme.sliderTrack)
                     .frame(height: lineHeight)
+                    .offset(y: (band - lineHeight) / 2)
 
                 Rectangle()
                     .fill(theme.accentGradient)
                     .frame(width: width * CGFloat(progress), height: lineHeight)
+                    .offset(y: (band - lineHeight) / 2)
 
                 Circle()
                     .fill(.ultraThinMaterial)
@@ -291,7 +297,7 @@ private struct PlayerProgressLine: View {
                     .frame(width: knob, height: knob)
                     .shadow(color: theme.accent.opacity(0.85), radius: knob * 0.7)
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
-                    .position(x: knobX, y: lineHeight / 2)
+                    .position(x: knobX, y: band / 2)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .animation(.easeOut(duration: 0.16), value: active)
@@ -401,7 +407,7 @@ private struct PlayerIconButton: View {
     var body: some View {
         Button(action: action) {
             icon
-                .foregroundColor(isHovering ? theme.accent : theme.text.opacity(0.86))
+                .foregroundColor(isHovering ? theme.accent : theme.accent.opacity(0.82))
                 .frame(width: size, height: size)
                 .background(
                     isHovering ? theme.raisedFill : Color.clear,
@@ -433,7 +439,7 @@ private struct VolumeButton: View {
             isPresented.toggle()
         } label: {
             Icons.volume(muted: isMuted, low: volume < 0.34)
-                .foregroundColor(isHovering || isPresented ? theme.accent : theme.text.opacity(0.86))
+                .foregroundColor(isHovering || isPresented ? theme.accent : theme.accent.opacity(0.82))
                 .frame(width: 30, height: 30)
                 .background(
                     isHovering || isPresented ? theme.raisedFill : Color.clear,

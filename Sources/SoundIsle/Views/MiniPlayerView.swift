@@ -38,9 +38,15 @@ struct MiniPlayerView: View {
 
     private var tintOpacity: Double {
         if palette.isDark {
-            return isHovering ? 0.62 : 0.30
+            return isHovering ? 0.55 : 0.18
         }
-        return isHovering ? 0.78 : 0.48
+        return isHovering ? 0.72 : 0.31
+    }
+
+    /// Keeps the title and lyric readable while the resting capsule is
+    /// nearly transparent: a dark halo in dark mode, a light one in light.
+    private var textShadow: Color {
+        palette.isDark ? Color.black.opacity(0.45) : Color.white.opacity(0.6)
     }
 
     var body: some View {
@@ -103,10 +109,12 @@ struct MiniPlayerView: View {
                 Text(model.currentTrack?.title ?? "未在播放")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundColor(palette.text)
+                    .shadow(color: textShadow, radius: 2, y: 1)
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.mutedText(0.55))
+                    .shadow(color: textShadow, radius: 2, y: 1)
                     .lineLimit(1)
             }
             .frame(width: 126, alignment: .leading)

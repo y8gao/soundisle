@@ -102,7 +102,7 @@ struct LyricsOverlayView: View {
                             next,
                             size: fontSize * 0.55,
                             weight: .regular,
-                            emphasis: 0.78
+                            emphasis: 0.72
                         )
                         .lineLimit(1)
                     }
@@ -119,7 +119,7 @@ struct LyricsOverlayView: View {
                                 line.text,
                                 size: fontSize * 0.7,
                                 weight: .regular,
-                                emphasis: 0.92
+                                emphasis: 0.72
                             )
                         }
                     }
@@ -177,12 +177,13 @@ struct LyricsOverlayView: View {
         .disabled(model.currentTrack == nil || model.isResolvingLyrics)
     }
 
-    /// Text follows the **system** appearance rather than the app's theme
-    /// preset: near-black on a light system with a white halo, white on a dark
-    /// system with a dark halo. macOS 12 has no native text stroke, so the
-    /// halo is drawn as offset copies plus a blur; 「歌词描边」 thickens it.
+    /// The fill follows the app theme's resolved accent; the halo still comes
+    /// from the **system** appearance (dark halo on a dark system, light on a
+    /// light one) so the line survives any wallpaper. macOS 12 has no native
+    /// text stroke, so the halo is drawn as offset copies plus a blur;
+    /// 「歌词描边」 thickens it.
     private var lyricFill: Color {
-        colorScheme == .dark ? .white : Color(white: 0.06)
+        colorScheme == .dark ? palette.accentLight : palette.accent
     }
 
     private var lyricHalo: Color {
@@ -254,6 +255,9 @@ struct LyricsOverlayView: View {
                 textButton("描边", help: "文字描边", isOn: outline) {
                     outline.toggle()
                     model.setLyricsOutline(outline)
+                }
+                controlButton("rectangle.compress.vertical", help: "切换到迷你窗口") {
+                    model.showMiniPlayer()
                 }
                 controlButton("xmark", help: "关闭歌词") {
                     model.setLyricsVisible(false)

@@ -104,7 +104,7 @@ struct NowPlayingLyricsView: View {
                     Text("返回列表")
                         .font(.system(size: 11.5, weight: .medium))
                 }
-                .foregroundColor(theme.text.opacity(0.82))
+                .foregroundColor(theme.accent.opacity(0.9))
                 .padding(.horizontal, 11)
                 .frame(height: 27)
                 .background(theme.raisedFill, in: Capsule())
@@ -142,12 +142,12 @@ struct NowPlayingLyricsView: View {
                 VStack(spacing: 4) {
                     Text(track?.title ?? "未在播放")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(theme.text)
+                        .foregroundColor(theme.accent)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                     Text(subtitle)
                         .font(.system(size: 11.5))
-                        .foregroundColor(theme.mutedText(0.55))
+                        .foregroundColor(theme.accent.opacity(theme.isDark ? 0.6 : 0.72))
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                 }
@@ -223,7 +223,7 @@ struct NowPlayingLyricsView: View {
                 Text(title)
                     .font(.system(size: 11.5, weight: .medium))
             }
-            .foregroundColor(isPrimary ? theme.onAccent : theme.text.opacity(0.82))
+            .foregroundColor(isPrimary ? theme.onAccent : theme.accent.opacity(0.9))
             .frame(maxWidth: .infinity)
             .frame(height: 28)
             .background(
@@ -232,7 +232,7 @@ struct NowPlayingLyricsView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isPrimary ? Color.clear : theme.hairline, lineWidth: 0.5)
+                    .strokeBorder(isPrimary ? Color.clear : theme.accent.opacity(0.3), lineWidth: 0.5)
             )
             .contentShape(Rectangle())
         }
@@ -295,7 +295,7 @@ struct NowPlayingLyricsView: View {
             .foregroundColor(
                 isCurrent
                     ? theme.accent
-                    : theme.text.opacity(isSynced ? 0.46 : 0.78)
+                    : theme.accent.opacity(isSynced ? 0.62 : 0.8)
             )
             .shadow(color: theme.accent.opacity(isCurrent ? 0.4 : 0), radius: 8)
             .lineSpacing(3)
@@ -359,7 +359,7 @@ struct NowPlayingLyricsView: View {
                 } label: {
                     Text("导入歌词…")
                         .font(.system(size: 11.5, weight: .medium))
-                        .foregroundColor(theme.text.opacity(0.82))
+                        .foregroundColor(theme.accentLight)
                         .padding(.horizontal, 13)
                         .frame(height: 28)
                         .background(theme.raisedFill, in: Capsule())
