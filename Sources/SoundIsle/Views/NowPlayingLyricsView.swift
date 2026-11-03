@@ -291,15 +291,17 @@ struct NowPlayingLyricsView: View {
 
     private func lyricLine(_ text: String, isCurrent: Bool, isSynced: Bool) -> some View {
         Text(text.isEmpty ? " " : text)
-            .font(.system(size: isCurrent ? 18.5 : 14, weight: isCurrent ? .semibold : .regular))
+            .font(.system(size: isCurrent ? 20 : 14, weight: isCurrent ? .semibold : .regular))
             .foregroundColor(
                 isCurrent
-                    ? theme.accentLight
+                    ? theme.accent
                     : theme.text.opacity(isSynced ? 0.46 : 0.78)
             )
+            .shadow(color: theme.accent.opacity(isCurrent ? 0.4 : 0), radius: 8)
             .lineSpacing(3)
+            .scaleEffect(isCurrent ? 1.02 : 1, anchor: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.easeOut(duration: 0.2), value: isCurrent)
+            .animation(.easeInOut(duration: 0.24), value: isCurrent)
             .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 

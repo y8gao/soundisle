@@ -92,7 +92,7 @@ struct LyricsOverlayView: View {
                         model.currentLyricText ?? "",
                         size: fontSize,
                         weight: .semibold,
-                        color: palette.text
+                        color: .white
                     )
                     .lineLimit(2)
 
@@ -103,7 +103,7 @@ struct LyricsOverlayView: View {
                             next,
                             size: fontSize * 0.55,
                             weight: .regular,
-                            color: palette.mutedText(0.52)
+                            color: Color.white.opacity(0.78)
                         )
                         .lineLimit(1)
                     }
@@ -120,7 +120,7 @@ struct LyricsOverlayView: View {
                                 line.text,
                                 size: fontSize * 0.7,
                                 weight: .regular,
-                                color: palette.text.opacity(0.85)
+                                color: Color.white.opacity(0.92)
                             )
                         }
                     }
@@ -178,8 +178,9 @@ struct LyricsOverlayView: View {
         .disabled(model.currentTrack == nil || model.isResolvingLyrics)
     }
 
-    /// Text has no native stroke on macOS 12, so draw a few offset copies
-    /// behind the fill when 「歌词描边」 is on.
+    /// macOS 12 has no native text stroke, so the overlay always draws a dark
+    /// halo behind a white fill. That keeps desktop lyrics legible on white
+    /// wallpapers even with 「歌词描边」 off; the setting thickens the halo.
     private func lyricText(
         _ text: String,
         size: CGFloat,
@@ -187,17 +188,24 @@ struct LyricsOverlayView: View {
         color: Color
     ) -> some View {
         let base = Text(text).font(.system(size: size, weight: weight))
+        let haloOpacity = outline ? 0.98 : 0.82
+        let haloBlur: CGFloat = outline ? 4.5 : 2.8
+        let ringScale: CGFloat = outline ? 1.0 : 0.85
         return ZStack {
-            if outline {
-                ForEach(Array(Self.outlineOffsets.enumerated()), id: \.offset) { _, offset in
-                    base
-                        .foregroundColor(.black.opacity(0.85))
-                        .offset(x: offset.width, y: offset.height)
-                }
+            base
+                .foregroundColor(.black.opacity(haloOpacity))
+                .blur(radius: haloBlur)
+            ForEach(Array(Self.outlineOffsets.enumerated()), id: \.offset) { _, offset in
+                base
+                    .foregroundColor(.black.opacity(haloOpacity))
+                    .offset(
+                        x: offset.width * ringScale,
+                        y: offset.height * ringScale
+                    )
             }
             base.foregroundColor(color)
         }
-        .shadow(color: .black.opacity(outline ? 0 : 0.35), radius: 2, y: 1)
+        .shadow(color: .black.opacity(outline ? 0.55 : 0.4), radius: outline ? 3 : 2, y: 1)
     }
 
     private static let outlineOffsets: [CGSize] = {
