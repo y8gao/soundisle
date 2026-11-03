@@ -23,6 +23,7 @@ struct SoundIsleApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            PlaybackCommands(model: appDelegate.model)
             LyricsCommands(model: appDelegate.model)
             FileOrganizerCommands(model: appDelegate.model)
         }
@@ -65,6 +66,31 @@ private struct FileOrganizerCommands: Commands {
                 model.undoLastOrganize()
             }
             .disabled(!model.canUndoOrganize || model.fileWorkProgress != nil)
+        }
+    }
+}
+
+/// Playback menu makes the shortcuts discoverable. The actual key handling
+/// lives in AppModel's monitor so Space/⌘←/⌘→ never fire while typing.
+private struct PlaybackCommands: Commands {
+    @ObservedObject var model: AppModel
+
+    var body: some Commands {
+        CommandMenu("播放") {
+            Button("播放 / 暂停（空格）") {
+                model.togglePlayPause()
+            }
+            .disabled(model.currentTrack == nil)
+
+            Button("上一首（⌘←）") {
+                model.previous()
+            }
+            .disabled(model.currentTrack == nil)
+
+            Button("下一首（⌘→）") {
+                model.next()
+            }
+            .disabled(model.currentTrack == nil)
         }
     }
 }

@@ -123,7 +123,7 @@ struct MiniPlayerView: View {
                     model.next()
                 }
                 MiniButton(
-                    icon: Icons.symbol("arrow.up.left.and.arrow.down.right", size: 12),
+                    icon: Icons.symbol("rectangle.expand.vertical", size: 14),
                     size: 28,
                     help: "展开主窗口"
                 ) {
