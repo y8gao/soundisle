@@ -18,6 +18,14 @@ final class MojibakeRepairTests: XCTestCase {
         XCTAssertEqual(MojibakeRepair.repaired(broken), "母亲")
     }
 
+    func testRepairUTF8MisreadAsWindows1252() {
+        // TagLib maps the 0x80...0x9F range with Windows-1252, producing
+        // characters above U+00FF (e.g. 0x8B -> U+2039). Real files must
+        // still repair.
+        let broken = String(data: Data(Array("天空之城".utf8)), encoding: .windowsCP1252)!
+        XCTAssertEqual(MojibakeRepair.repaired(broken), "天空之城")
+    }
+
     func testNormalChineseUnchanged() {
         XCTAssertNil(MojibakeRepair.repaired("母亲"))
     }

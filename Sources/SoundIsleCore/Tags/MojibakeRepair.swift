@@ -11,16 +11,40 @@ public enum MojibakeRepair {
         )
     )
 
+    /// TagLib decodes malformed ISO-8859-1 tag bytes in 0x80...0x9F with the
+    /// Windows-1252 table, so a real UTF-8 mis-decode contains U+2039, U+0178
+    /// and friends rather than C1 controls. Map those scalars back to the
+    /// original byte before trying to decode.
+    private static let windows1252ToByte: [UInt32: UInt8] = [
+        0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
+        0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
+        0x2030: 0x89, 0x0160: 0x8A, 0x2039: 0x8B, 0x0152: 0x8C,
+        0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93,
+        0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+        0x02DC: 0x98, 0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B,
+        0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F,
+    ]
+
     /// Returns the repaired text when a UTF-8 or GB18030 decode contains more
     /// Chinese characters than the input; `nil` when the input is not Latin-1
     /// mojibake or no candidate improves on it.
     public static func repaired(_ text: String) -> String? {
         let scalars = text.unicodeScalars
         guard !scalars.isEmpty else { return nil }
-        // Real Chinese text is already above U+00FF and needs no repair.
-        guard scalars.allSatisfy({ $0.value <= 0xFF }) else { return nil }
 
-        let bytes = Data(scalars.map { UInt8($0.value) })
+        var bytes = [UInt8]()
+        bytes.reserveCapacity(scalars.count)
+        for scalar in scalars {
+            if scalar.value <= 0xFF {
+                bytes.append(UInt8(scalar.value))
+            } else if let byte = windows1252ToByte[scalar.value] {
+                bytes.append(byte)
+            } else {
+                // Real Chinese text is already above U+00FF and needs no repair.
+                return nil
+            }
+        }
+
         let originalRatio = chineseRatio(text)
         let originalASCII = asciiOnly(text)
         var best: (text: String, ratio: Double)?
@@ -29,8 +53,8 @@ public enum MojibakeRepair {
         // only yields Latin letters. Candidates must keep every ASCII run
         // intact: GB18030 consumes ASCII bytes as trail bytes for some pairs,
         // which is how accidental "Han" text is told apart from real text.
-        for candidate in [String(data: bytes, encoding: .utf8),
-                          String(data: bytes, encoding: gb18030)] {
+        for candidate in [String(data: Data(bytes), encoding: .utf8),
+                          String(data: Data(bytes), encoding: gb18030)] {
             guard let candidate, asciiOnly(candidate) == originalASCII else { continue }
             let ratio = chineseRatio(candidate)
             guard ratio > originalRatio else { continue }
