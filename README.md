@@ -70,6 +70,7 @@ bash Scripts/build-app.sh
 - 整理文件的「复制」模式会在目标位置新增副本；再次扫描源文件夹时可能出现重复条目。
 - 没有 ID3v2 标签块的 WAV 为只读（TagLib 1.13 无法为其新建 ID3v2 块）。
 - WMA/ASF 的「专辑歌手」与封面字段为只读。
+- 媒体键（F7/F8/F9 与「正在播放」面板）只在声屿是系统当前 Now Playing 应用时到达应用；否则 macOS 可能把按键路由给其他播放器（例如 Apple Music）。
 - 应用使用 ad-hoc 签名，未做公证；首次打开可能需要右键「打开」，或执行 `xattr -dr com.apple.quarantine build/声屿.app`。每次重新构建后系统权限记录可能重置。
 - 应用不采集麦克风输入，也没有安装输入节点或输入 tap，`Info.plist` 未声明 `NSMicrophoneUsageDescription`。如果 macOS 仍然弹出麦克风权限请求，选择「不允许」不影响播放。
 - 歌词悬浮窗与迷你窗默认在屏幕录制/截图中隐藏；可在设置中关闭该行为。
