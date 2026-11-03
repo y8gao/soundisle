@@ -68,8 +68,20 @@ struct SidebarView: View {
             }
         }
         .frame(maxHeight: .infinity)
-        .background(theme.panelTint.opacity(theme.isDark ? 0.30 : 0.58))
-        .background(.ultraThinMaterial)
+        // Fixed theme gradient instead of a system material: NSVisualEffectView
+        // changes with window activity, which made the sidebar flip black or
+        // white when another app became active.
+        .background(
+            LinearGradient(
+                colors: [
+                    theme.backgroundTop.opacity(theme.isDark ? 0.64 : 0.72),
+                    theme.backgroundMiddle.opacity(theme.isDark ? 0.56 : 0.64),
+                    theme.backgroundBottom.opacity(theme.isDark ? 0.64 : 0.72),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(theme.hairline)

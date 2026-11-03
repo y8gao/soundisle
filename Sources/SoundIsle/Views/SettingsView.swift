@@ -17,6 +17,7 @@ struct SettingsView: View {
     /// Identifies the sheet window so clicks inside it (and in nested
     /// popovers) can be distinguished from a click on the window behind.
     @State private var sheetWindow: NSWindow?
+    @State private var focusReleaseMonitor: Any?
     @State private var outsideClickMonitor: Any?
     @State private var lyricsEndpointText = ""
     @State private var lyricsEndpointNotice: String?
@@ -72,6 +73,7 @@ struct SettingsView: View {
             model.refreshTranscodeCacheSize()
             lyricsEndpointText = settings.lyricsEndpoint ?? ""
             installOutsideClickMonitor()
+            installFocusReleaseMonitor()
             // Don't let the endpoint field take the initial focus just because
             // it is the first text field in the sheet.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -81,6 +83,8 @@ struct SettingsView: View {
         .onDisappear {
             saveLyricsEndpoint()
             removeOutsideClickMonitor()
+            if let focusReleaseMonitor { NSEvent.removeMonitor(focusReleaseMonitor) }
+            focusReleaseMonitor = nil
         }
     }
 
@@ -541,6 +545,28 @@ struct SettingsView: View {
     /// A click on the main window behind the sheet dismisses it. Clicks inside
     /// the sheet, in a nested popover (ColorPicker), or on chrome with no
     /// window are left alone.
+    /// Clicking a non-text control inside the sheet resigns the endpoint
+    /// field; otherwise it keeps the keyboard focus after the user clicks away.
+    private func installFocusReleaseMonitor() {
+        focusReleaseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
+            guard let window = event.window, window.isSheet,
+                  let hit = window.contentView?.hitTest(event.locationInWindow) else { return event }
+            if !Self.isTextInput(hit) {
+                window.makeFirstResponder(nil)
+            }
+            return event
+        }
+    }
+
+    private static func isTextInput(_ view: NSView?) -> Bool {
+        var current = view
+        while let candidate = current {
+            if candidate is NSTextField || candidate is NSTextView { return true }
+            current = candidate.superview
+        }
+        return false
+    }
+
     private func installOutsideClickMonitor() {
         guard outsideClickMonitor == nil else { return }
         outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
