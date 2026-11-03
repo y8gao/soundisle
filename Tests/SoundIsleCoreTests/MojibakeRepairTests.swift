@@ -19,9 +19,9 @@ final class MojibakeRepairTests: XCTestCase {
     }
 
     func testRepairUTF8MisreadAsWindows1252() {
-        // TagLib maps the 0x80...0x9F range with Windows-1252, producing
-        // characters above U+00FF (e.g. 0x8B -> U+2039). Real files must
-        // still repair.
+        // An earlier/AVFoundation decode can widen the 0x80...0x9F bytes via
+        // Windows-1252, producing characters above U+00FF (e.g. 0x8B -> U+2039).
+        // TagLib 1.13.1 itself is strict ISO-8859-1. Real files must still repair.
         let broken = String(data: Data(Array("天空之城".utf8)), encoding: .windowsCP1252)!
         XCTAssertEqual(MojibakeRepair.repaired(broken), "天空之城")
     }

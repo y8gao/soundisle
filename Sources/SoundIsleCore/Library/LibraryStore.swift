@@ -17,6 +17,9 @@ public final class LibraryStore {
     public private(set) var unreadableURLs: [URL] = []
     /// Last persistence failure, for diagnostics in the settings screen.
     public private(set) var lastError: Error?
+    /// User-facing notice when a load had to recover from `.bak` or fall
+    /// back to defaults, so corruption is never silent.
+    public private(set) var recoveryNotice: String?
 
     public var missingTracks: [Track] {
         index.tracks.filter(\.isMissing)
@@ -40,9 +43,64 @@ public final class LibraryStore {
     }
 
     public func load() {
-        index = store.loadIndex()
-        playlists = store.loadPlaylists()
-        settings = store.loadSettings()
+        let indexResult = store.loadIndexOutcome()
+        index = indexResult.value
+        let playlistsResult = store.loadPlaylistsOutcome()
+        playlists = playlistsResult.value
+        let settingsResult = store.loadSettingsOutcome()
+        settings = settingsResult.value
+        recoveryNotice = Self.recoveryNotice([
+            ("曲库", indexResult.source),
+            ("播放列表", playlistsResult.source),
+            ("设置", settingsResult.source),
+        ])
+        normalizeIndexMojibake()
+    }
+
+    /// A rescan keeps unchanged rows verbatim, so an index written before
+    /// `TrackFactory` repaired mojibake would stay garbled forever. Repair the
+    /// display strings once at load and persist the healed index.
+    private func normalizeIndexMojibake() {
+        var changed = false
+        for position in index.tracks.indices {
+            var track = index.tracks[position]
+            let title = Self.repaired(track.title)
+            let artist = Self.repaired(track.artist)
+            let album = Self.repaired(track.album)
+            let albumArtist = track.albumArtist.map(Self.repaired)
+            guard title != track.title
+                    || artist != track.artist
+                    || album != track.album
+                    || albumArtist != track.albumArtist else { continue }
+            track.title = title
+            track.artist = artist
+            track.album = album
+            track.albumArtist = albumArtist
+            index.tracks[position] = track
+            changed = true
+        }
+        if changed {
+            saveIndex()
+        }
+    }
+
+    private static func repaired(_ text: String) -> String {
+        MojibakeRepair.repaired(text) ?? text
+    }
+
+    private static func recoveryNotice(
+        _ sources: [(name: String, source: IndexStore.LoadSource)]
+    ) -> String? {
+        let backedUp = sources.filter { $0.source == .backup }.map(\.name)
+        let unreadable = sources.filter { $0.source == .unreadable }.map(\.name)
+        var parts: [String] = []
+        if !backedUp.isEmpty {
+            parts.append("\(backedUp.joined(separator: "/"))已从备份恢复")
+        }
+        if !unreadable.isEmpty {
+            parts.append("\(unreadable.joined(separator: "/"))无法读取，已使用默认数据")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "；") + "。"
     }
 
     /// Settings are written through the store that owns them, so `AppModel`
@@ -50,6 +108,7 @@ public final class LibraryStore {
     public func saveSettings() {
         do {
             try store.saveSettings(settings)
+            lastError = nil
         } catch {
             lastError = error
         }
@@ -207,6 +266,12 @@ public final class LibraryStore {
         removeTracks { $0.isMissing }
     }
 
+    /// Removes a single row (used by the missing-file list) and prunes any
+    /// playlist entries that pointed at it.
+    public func removeTrack(id: UUID) {
+        removeTracks { $0.id == id }
+    }
+
     // MARK: - Private
 
     private func removeTracks(where predicate: (Track) -> Bool) {
@@ -232,6 +297,7 @@ public final class LibraryStore {
     private func saveIndex() {
         do {
             try store.saveIndex(index)
+            lastError = nil
         } catch {
             lastError = error
         }
@@ -242,6 +308,7 @@ public final class LibraryStore {
     public func savePlaylists() {
         do {
             try store.savePlaylists(playlists)
+            lastError = nil
         } catch {
             lastError = error
         }

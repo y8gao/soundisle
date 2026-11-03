@@ -68,4 +68,82 @@ final class TrackFactoryTagUpdateTests: XCTestCase {
         XCTAssertEqual(updated.year, 2004)
         XCTAssertEqual(updated.genre, "Rock")
     }
+
+    // MARK: - Mojibake metadata
+
+    private func misread(_ text: String, encoding: String.Encoding = .utf8) -> String {
+        String(data: text.data(using: encoding)!, encoding: .isoLatin1)!
+    }
+
+    private var gb18030: String.Encoding {
+        String.Encoding(
+            rawValue: CFStringConvertEncodingToNSStringEncoding(
+                CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)
+            )
+        )
+    }
+
+    func testMakeRepairsUTF8MetadataMisreadAsLatin1() {
+        let track = TrackFactory.make(
+            url: URL(fileURLWithPath: "/tmp/x.mp3"),
+            metadata: AudioMetadata(
+                title: misread("天空之城"),
+                artist: misread("久石让"),
+                album: misread("天空之城"),
+                albumArtist: misread("久石让")
+            )
+        )
+
+        XCTAssertEqual(track.title, "天空之城")
+        XCTAssertEqual(track.artist, "久石让")
+        XCTAssertEqual(track.album, "天空之城")
+        XCTAssertEqual(track.albumArtist, "久石让")
+    }
+
+    func testMakeRepairsGB18030MetadataMisreadAsLatin1() {
+        let track = TrackFactory.make(
+            url: URL(fileURLWithPath: "/tmp/x.mp3"),
+            metadata: AudioMetadata(
+                title: misread("母亲", encoding: gb18030),
+                artist: misread("阎维文", encoding: gb18030)
+            )
+        )
+
+        XCTAssertEqual(track.title, "母亲")
+        XCTAssertEqual(track.artist, "阎维文")
+    }
+
+    func testMakeLeavesNormalChineseAndLatinTextAlone() {
+        let normal = TrackFactory.make(
+            url: URL(fileURLWithPath: "/tmp/x.mp3"),
+            metadata: AudioMetadata(title: "母亲", artist: "阎维文")
+        )
+        XCTAssertEqual(normal.title, "母亲")
+        XCTAssertEqual(normal.artist, "阎维文")
+
+        let latin = TrackFactory.make(
+            url: URL(fileURLWithPath: "/tmp/y.mp3"),
+            metadata: AudioMetadata(title: "Beyoncé’s", artist: "Beyoncé")
+        )
+        XCTAssertEqual(latin.title, "Beyoncé’s")
+        XCTAssertEqual(latin.artist, "Beyoncé")
+    }
+
+    func testApplyingRepairsMojibakeFields() {
+        let original = scanned("x.mp3")
+        let updated = TrackFactory.applying(
+            TagFields(
+                title: misread("天空之城"),
+                artist: misread("久石让"),
+                album: misread("天空之城"),
+                albumArtist: misread("久石让")
+            ),
+            to: original
+        )
+
+        XCTAssertEqual(updated.title, "天空之城")
+        XCTAssertEqual(updated.artist, "久石让")
+        XCTAssertEqual(updated.album, "天空之城")
+        XCTAssertEqual(updated.albumArtist, "久石让")
+    }
 }

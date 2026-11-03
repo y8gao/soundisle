@@ -140,7 +140,7 @@ final class FileOrganizerTests: XCTestCase {
         )
         let organizer = makeOrganizer()
 
-        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot, copy: false)
+        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot)
 
         XCTAssertEqual(items.count, 1)
         XCTAssertTrue(items[0].conflictResolved)
@@ -156,8 +156,7 @@ final class FileOrganizerTests: XCTestCase {
         let items = organizer.plan(
             [motherTrack(url: first), motherTrack(url: second)],
             template: motherTemplate,
-            root: destinationRoot,
-            copy: false
+            root: destinationRoot
         )
 
         XCTAssertEqual(items.count, 2)
@@ -172,7 +171,7 @@ final class FileOrganizerTests: XCTestCase {
     func testApplyCopyLeavesSourceInPlace() throws {
         let source = try makeFile("a.mp3", in: libraryDir, contents: "audio")
         let organizer = makeOrganizer()
-        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot, copy: true)
+        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot)
 
         try organizer.apply(items, copy: true)
 
@@ -184,7 +183,7 @@ final class FileOrganizerTests: XCTestCase {
     func testApplyMoveRemovesSourceAndUndoRestoresIt() throws {
         let source = try makeFile("a.mp3", in: libraryDir, contents: "audio")
         let organizer = makeOrganizer()
-        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot, copy: false)
+        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot)
 
         try organizer.apply(items, copy: false)
 
@@ -202,7 +201,7 @@ final class FileOrganizerTests: XCTestCase {
     func testUndoCopyRemovesDestinationAndKeepsSource() throws {
         let source = try makeFile("a.mp3", in: libraryDir)
         let organizer = makeOrganizer()
-        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot, copy: true)
+        let items = organizer.plan([motherTrack(url: source)], template: motherTemplate, root: destinationRoot)
 
         try organizer.apply(items, copy: true)
         _ = try organizer.undoLast()
@@ -217,8 +216,7 @@ final class FileOrganizerTests: XCTestCase {
         let items = makeOrganizer().plan(
             [motherTrack(url: source)],
             template: motherTemplate,
-            root: destinationRoot,
-            copy: false
+            root: destinationRoot
         )
         try makeOrganizer().apply(items, copy: false)
 
@@ -237,8 +235,7 @@ final class FileOrganizerTests: XCTestCase {
         let items = organizer.plan(
             [motherTrack(url: source)],
             template: motherTemplate,
-            root: destinationRoot,
-            copy: false
+            root: destinationRoot
         )
         // The destination appears after the preview was produced.
         let existing = try makeFile(
@@ -270,8 +267,7 @@ final class FileOrganizerTests: XCTestCase {
         let items = organizer.plan(
             [motherTrack(url: firstSource), second],
             template: motherTemplate,
-            root: destinationRoot,
-            copy: false
+            root: destinationRoot
         )
         XCTAssertEqual(items.count, 2)
 
@@ -320,8 +316,7 @@ final class FileOrganizerTests: XCTestCase {
         let items = organizer.plan(
             library.index.tracks,
             template: "{title}",
-            root: destinationRoot,
-            copy: false
+            root: destinationRoot
         )
         XCTAssertEqual(items.count, 2)
         try organizer.apply(items, copy: false)
@@ -426,8 +421,7 @@ final class FileOrganizerTests: XCTestCase {
         let items = organizer.plan(
             library.index.tracks,
             template: "{artist}/{album}/{title}",
-            root: destinationRoot,
-            copy: false
+            root: destinationRoot
         )
         try organizer.apply(items, copy: false)
         XCTAssertEqual(items.count, 1)
@@ -451,9 +445,40 @@ final class FileOrganizerTests: XCTestCase {
             $0.standardizedFileURL == destinationRoot.standardizedFileURL
         })
     }
+
+    // MARK: - Corrupt undo history
+
+    func testOrganizeHistoryRecoversFromBackup() throws {
+        let source = libraryDir.appendingPathComponent("a.mp3")
+        let destination = destinationRoot.appendingPathComponent("b.mp3")
+        let item = OrganizePlanItem(source: source, destination: destination, conflictResolved: false)
+        let store = OrganizeUndoStore(directory: undoDir)
+        try store.record([item], copy: false)
+        try store.record([item], copy: false)
+
+        let file = undoDir.appendingPathComponent("organize.json")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: file.appendingPathExtension("bak").path
+        ))
+        try Data("{".utf8).write(to: file)
+
+        let reopened = OrganizeUndoStore(directory: undoDir)
+        XCTAssertEqual(reopened.entries.count, 1)
+        XCTAssertNotNil(reopened.loadNotice)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testOrganizeHistoryCorruptionWithoutBackupReports() throws {
+        try Data("{".utf8).write(to: undoDir.appendingPathComponent("organize.json"))
+
+        let store = OrganizeUndoStore(directory: undoDir)
+        XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertNotNil(store.loadNotice)
+    }
 }
 
 /// Simulates an unreadable filesystem so volume detection cannot resolve.
 private final class NothingExistsFileManager: FileManager {
     override func fileExists(atPath path: String) -> Bool { false }
+
 }

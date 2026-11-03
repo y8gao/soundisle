@@ -79,10 +79,6 @@ public struct LyricsDisplayState: Equatable {
         origin = resolved?.origin ?? .none
         isResolving = false
     }
-
-    public mutating func cancelLoading() {
-        isResolving = false
-    }
 }
 
 /// Resolves lyrics in priority order: manual override, same-name `.lrc`

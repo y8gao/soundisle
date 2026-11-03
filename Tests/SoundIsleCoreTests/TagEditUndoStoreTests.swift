@@ -148,9 +148,43 @@ final class TagEditUndoStoreTests: XCTestCase {
 
         let store = TagEditUndoStore(directory: directory)
         try store.record(entry(url, before: TagFields(title: "一"), after: TagFields(title: "二")))
+        // A second record creates `.bak`; clear must remove it too or the
+        // cleared history would be resurrected on the next launch.
+        try store.record(entry(url, before: TagFields(title: "二"), after: TagFields(title: "三")))
         try store.clear()
 
         XCTAssertTrue(store.entries.isEmpty)
         XCTAssertTrue(TagEditUndoStore(directory: directory).entries.isEmpty)
+    }
+
+    // MARK: - Corrupt history
+
+    func testCorruptHistoryRecoversFromBackup() throws {
+        let directory = tempDir.appendingPathComponent("undo")
+        let url = tempDir.appendingPathComponent("a.mp3")
+        let store = TagEditUndoStore(directory: directory)
+        try store.record(entry(url, before: TagFields(title: "一"), after: TagFields(title: "二")))
+        try store.record(entry(url, before: TagFields(title: "二"), after: TagFields(title: "三")))
+
+        let file = directory.appendingPathComponent("tag-edits.json")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: file.appendingPathExtension("bak").path
+        ))
+        try Data("{".utf8).write(to: file)
+
+        let reopened = TagEditUndoStore(directory: directory)
+        XCTAssertEqual(reopened.entries.count, 1)
+        XCTAssertEqual(reopened.entries.first?.before.title, "一")
+        XCTAssertNotNil(reopened.loadNotice)
+    }
+
+    func testCorruptHistoryWithoutBackupReports() throws {
+        let directory = tempDir.appendingPathComponent("undo")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{".utf8).write(to: directory.appendingPathComponent("tag-edits.json"))
+
+        let store = TagEditUndoStore(directory: directory)
+        XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertNotNil(store.loadNotice)
     }
 }

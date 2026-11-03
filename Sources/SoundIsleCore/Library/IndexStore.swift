@@ -25,8 +25,24 @@ public final class IndexStore {
 
     // MARK: - Index
 
+    /// Where a decoded value came from. `library.json` can be recovered from
+    /// its `.bak`, but callers must be able to tell the user that happened.
+    enum LoadSource: Equatable {
+        case primary
+        case backup
+        /// A file existed but neither it nor its `.bak` could be decoded.
+        case unreadable
+        /// Nothing was written yet (first launch), which is not a failure.
+        case absent
+    }
+
     public func loadIndex() -> LibraryIndex {
-        decode(LibraryIndex.self, from: fileURL("library.json")) ?? LibraryIndex()
+        loadIndexOutcome().value
+    }
+
+    func loadIndexOutcome() -> (value: LibraryIndex, source: LoadSource) {
+        let result = decode(LibraryIndex.self, from: fileURL("library.json"))
+        return (result.value ?? LibraryIndex(), result.source)
     }
 
     public func saveIndex(_ index: LibraryIndex) throws {
@@ -36,7 +52,12 @@ public final class IndexStore {
     // MARK: - Playlists
 
     public func loadPlaylists() -> [Playlist] {
-        decode([Playlist].self, from: fileURL("playlists.json")) ?? []
+        loadPlaylistsOutcome().value
+    }
+
+    func loadPlaylistsOutcome() -> (value: [Playlist], source: LoadSource) {
+        let result = decode([Playlist].self, from: fileURL("playlists.json"))
+        return (result.value ?? [], result.source)
     }
 
     public func savePlaylists(_ playlists: [Playlist]) throws {
@@ -46,7 +67,12 @@ public final class IndexStore {
     // MARK: - Settings
 
     public func loadSettings() -> AppSettings {
-        decode(AppSettings.self, from: fileURL("settings.json")) ?? AppSettings()
+        loadSettingsOutcome().value
+    }
+
+    func loadSettingsOutcome() -> (value: AppSettings, source: LoadSource) {
+        let result = decode(AppSettings.self, from: fileURL("settings.json"))
+        return (result.value ?? AppSettings(), result.source)
     }
 
     public func saveSettings(_ settings: AppSettings) throws {
@@ -55,15 +81,25 @@ public final class IndexStore {
 
     // MARK: - Atomic write and backup
 
-    private func decode<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
+    private func decode<T: Decodable>(
+        _ type: T.Type,
+        from url: URL
+    ) -> (value: T?, source: LoadSource) {
         // Current file first, previous version second. Anything unreadable is
-        // treated as absent instead of thrown so callers always get a value.
-        for candidate in [url, url.appendingPathExtension("bak")] {
-            guard let data = try? Data(contentsOf: candidate),
-                  let value = try? decoder.decode(T.self, from: data) else { continue }
-            return value
+        // treated as absent instead of thrown so callers always get a value,
+        // but the source lets them report recovery in the UI.
+        if let data = try? Data(contentsOf: url),
+           let value = try? decoder.decode(T.self, from: data) {
+            return (value, .primary)
         }
-        return nil
+        let backup = url.appendingPathExtension("bak")
+        if let data = try? Data(contentsOf: backup),
+           let value = try? decoder.decode(T.self, from: data) {
+            return (value, .backup)
+        }
+        let anyFileExists = manager.fileExists(atPath: url.path)
+            || manager.fileExists(atPath: backup.path)
+        return (nil, anyFileExists ? .unreadable : .absent)
     }
 
     private func write<T: Codable>(_ value: T, to url: URL) throws {

@@ -64,6 +64,18 @@ final class LibraryStoreTests: XCTestCase {
         )
     }
 
+    private var gb18030: String.Encoding {
+        String.Encoding(
+            rawValue: CFStringConvertEncodingToNSStringEncoding(
+                CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)
+            )
+        )
+    }
+
+    private func misread(_ text: String, encoding: String.Encoding = .utf8) -> String {
+        String(data: text.data(using: encoding)!, encoding: .isoLatin1)!
+    }
+
     /// Reader stub so rescan tests never touch AVFoundation or real audio data.
     private final class StubReader: MetadataReading {
         private var metadata: [String: AudioMetadata] = [:]
@@ -383,7 +395,18 @@ final class LibraryStoreTests: XCTestCase {
         let goneID = try track(named: "消失", in: store).id
         let playlist = Playlist(name: "收藏", trackIDs: [keepID, goneID])
         try IndexStore(directory: dataDir).savePlaylists([playlist])
+        // Simulate an index written before TrackFactory repaired mojibake:
+        // load() must heal the title in place so a rescan keeps it readable.
+        var persisted = IndexStore(directory: dataDir).loadIndex()
+        if let position = persisted.tracks.firstIndex(where: { $0.id == keepID }) {
+            persisted.tracks[position].title = String(
+                data: Data(Array("保留".utf8)),
+                encoding: .isoLatin1
+            )!
+        }
+        try IndexStore(directory: dataDir).saveIndex(persisted)
         store.load()
+        XCTAssertEqual(try track(named: "保留", in: store).id, keepID)
 
         try fm.removeItem(at: goneURL)
         await store.rescan(reader: reader)
@@ -513,5 +536,33 @@ final class LibraryStoreTests: XCTestCase {
         XCTAssertEqual(persisted.id, track.id)
         XCTAssertEqual(persisted.title, "改后的名字")
         XCTAssertEqual(persisted.artist, "改后的歌手")
+    }
+
+    @MainActor
+    func testLoadRepairsGarbledTitlesAndPersists() throws {
+        let id = UUID()
+        let garbled = Track(
+            id: id,
+            url: URL(fileURLWithPath: "/tmp/天空之城.mp3"),
+            title: misread("天空之城"),
+            artist: misread("久石让"),
+            album: misread("天空之城"),
+            albumArtist: misread("久石让", encoding: gb18030)
+        )
+        try IndexStore(directory: dataDir).saveIndex(
+            LibraryIndex(tracks: [garbled], folders: [libraryRoot])
+        )
+
+        let store = LibraryStore(directory: dataDir)
+        store.load()
+
+        let loaded = try XCTUnwrap(store.index.tracks.first)
+        XCTAssertEqual(loaded.id, id)
+        XCTAssertEqual(loaded.title, "天空之城")
+        XCTAssertEqual(loaded.artist, "久石让")
+        XCTAssertEqual(loaded.album, "天空之城")
+        XCTAssertEqual(loaded.albumArtist, "久石让")
+        // The healed row is written back, so the next launch starts clean.
+        XCTAssertEqual(persistedIndex().tracks.first?.title, "天空之城")
     }
 }

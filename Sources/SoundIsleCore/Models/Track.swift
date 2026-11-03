@@ -61,7 +61,11 @@ public enum TrackFactory {
         func clean(_ value: String?) -> String? {
             guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !trimmed.isEmpty else { return nil }
-            return trimmed
+            // Library metadata is sometimes decoded as Latin-1 even though the
+            // file stored UTF-8 or GB18030. Repair the display string here so
+            // every Track built by the scanner (or rebuilt after a tag edit)
+            // carries readable text; the files themselves are untouched.
+            return MojibakeRepair.repaired(trimmed) ?? trimmed
         }
 
         let title = clean(metadata?.title) ?? clean(parsed.title) ?? stem
@@ -70,7 +74,7 @@ public enum TrackFactory {
             id: id,
             url: url,
             title: title,
-            artist: clean(metadata?.artist) ?? parsed.artist ?? "",
+            artist: clean(metadata?.artist) ?? clean(parsed.artist) ?? "",
             album: clean(metadata?.album) ?? "",
             albumArtist: clean(metadata?.albumArtist),
             year: metadata?.year,
@@ -95,12 +99,16 @@ public enum TrackFactory {
         func clean(_ value: String?) -> String? {
             guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !trimmed.isEmpty else { return nil }
-            return trimmed
+            // Library metadata is sometimes decoded as Latin-1 even though the
+            // file stored UTF-8 or GB18030. Repair the display string here so
+            // every Track built by the scanner (or rebuilt after a tag edit)
+            // carries readable text; the files themselves are untouched.
+            return MojibakeRepair.repaired(trimmed) ?? trimmed
         }
 
         var updated = track
         updated.title = clean(fields.title) ?? clean(parsed.title) ?? stem
-        updated.artist = clean(fields.artist) ?? parsed.artist ?? ""
+        updated.artist = clean(fields.artist) ?? clean(parsed.artist) ?? ""
         updated.album = clean(fields.album) ?? ""
         updated.albumArtist = clean(fields.albumArtist)
         updated.year = fields.year

@@ -75,8 +75,7 @@ public final class FileOrganizer {
     public func plan(
         _ tracks: [Track],
         template: String,
-        root: URL,
-        copy: Bool
+        root: URL
     ) -> [OrganizePlanItem] {
         var planned = Set<String>()
         var items: [OrganizePlanItem] = []
@@ -106,8 +105,14 @@ public final class FileOrganizer {
     }
 
     /// Moves or copies every planned file. The whole plan is recorded before
-    /// the first write so a mid-run failure can still be undone.
-    public func apply(_ items: [OrganizePlanItem], copy: Bool) throws {
+    /// the first write so a mid-run failure can still be undone. `progress`
+    /// runs after each completed file and may be called from a background
+    /// queue, so the UI can report "正在整理 n/total…".
+    public func apply(
+        _ items: [OrganizePlanItem],
+        copy: Bool,
+        progress: ((_ completed: Int, _ total: Int) -> Void)? = nil
+    ) throws {
         guard !items.isEmpty else { return }
         try preflight(items)
         try undo.record(items, copy: copy)
@@ -125,6 +130,7 @@ public final class FileOrganizer {
                     try OrganizeFileOps.move(from: item.source, to: item.destination, manager: manager)
                 }
                 applied.append(item)
+                progress?(applied.count, items.count)
             }
         } catch {
             throw OrganizeError.applyFailed(applied: applied, underlying: error)

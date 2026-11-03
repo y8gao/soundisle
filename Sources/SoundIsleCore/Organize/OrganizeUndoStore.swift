@@ -23,6 +23,8 @@ public struct OrganizeUndoEntry: Codable, Equatable {
 /// restore location are never overwritten.
 public final class OrganizeUndoStore {
     public private(set) var entries: [OrganizeUndoEntry] = []
+    /// Chinese notice when the history had to be recovered or was unreadable.
+    public private(set) var loadNotice: String?
 
     private let directory: URL
     private let limit: Int
@@ -33,7 +35,11 @@ public final class OrganizeUndoStore {
         self.limit = max(limit, 1)
         self.manager = manager
         try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        entries = Self.load(from: fileURL, limit: self.limit)
+        let loaded = Self.load(from: directory.appendingPathComponent("organize.json"),
+                               limit: self.limit,
+                               manager: manager)
+        entries = loaded.entries
+        loadNotice = loaded.notice
     }
 
     private var fileURL: URL {
@@ -90,28 +96,30 @@ public final class OrganizeUndoStore {
     }
 
     public func clear() throws {
-        if manager.fileExists(atPath: fileURL.path) {
-            try manager.removeItem(at: fileURL)
-        }
+        try BackupJSON.remove(from: fileURL, manager: manager)
         entries = []
     }
 
-    private static func load(from url: URL, limit: Int) -> [OrganizeUndoEntry] {
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([OrganizeUndoEntry].self, from: data) else {
-            return []
+    private static func load(
+        from url: URL,
+        limit: Int,
+        manager: FileManager
+    ) -> (entries: [OrganizeUndoEntry], notice: String?) {
+        let loaded = BackupJSON.load([OrganizeUndoEntry].self, from: url, manager: manager)
+        let notice: String?
+        switch loaded.source {
+        case .backup:
+            notice = "整理撤销记录已从备份恢复。"
+        case .corrupt:
+            notice = "整理撤销记录已损坏，无法读取。"
+        case .primary, .missing:
+            notice = nil
         }
-        return Array(decoded.suffix(max(limit, 1)))
+        guard let decoded = loaded.value else { return ([], notice) }
+        return (Array(decoded.suffix(max(limit, 1))), notice)
     }
 
     private static func save(_ entries: [OrganizeUndoEntry], to url: URL, manager: FileManager) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(entries)
-        try manager.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try data.write(to: url, options: .atomic)
+        try BackupJSON.save(entries, to: url, manager: manager)
     }
 }

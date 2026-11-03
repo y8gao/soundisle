@@ -222,6 +222,7 @@ public final class TranscodeQueue {
         try? manager.removeItem(at: temporary)
 
         let process = Process()
+        process.qualityOfService = .utility
         process.executableURL = ffmpeg
         process.arguments = [
             "-y",

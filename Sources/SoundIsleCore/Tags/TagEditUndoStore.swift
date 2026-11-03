@@ -24,6 +24,8 @@ public struct TagUndoEntry: Codable, Equatable {
 /// write error never loses the user's undo history.
 public final class TagEditUndoStore {
     public private(set) var entries: [TagUndoEntry] = []
+    /// Chinese notice when the history had to be recovered or was unreadable.
+    public private(set) var loadNotice: String?
 
     private let directory: URL
     private let limit: Int
@@ -36,7 +38,11 @@ public final class TagEditUndoStore {
         self.manager = manager
         self.service = TagService()
         try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
-        entries = Self.load(from: fileURL, limit: self.limit, manager: manager)
+        let loaded = Self.load(from: directory.appendingPathComponent("tag-edits.json"),
+                               limit: self.limit,
+                               manager: manager)
+        entries = loaded.entries
+        loadNotice = loaded.notice
     }
 
     private var fileURL: URL {
@@ -68,9 +74,7 @@ public final class TagEditUndoStore {
     }
 
     public func clear() throws {
-        if manager.fileExists(atPath: fileURL.path) {
-            try manager.removeItem(at: fileURL)
-        }
+        try BackupJSON.remove(from: fileURL, manager: manager)
         entries = []
     }
 
@@ -90,23 +94,27 @@ public final class TagEditUndoStore {
         return payload
     }
 
-    private static func load(from url: URL, limit: Int, manager: FileManager) -> [TagUndoEntry] {
-        guard let data = try? Data(contentsOf: url),
-              let decoded = try? JSONDecoder().decode([TagUndoEntry].self, from: data) else {
-            return []
+    private static func load(
+        from url: URL,
+        limit: Int,
+        manager: FileManager
+    ) -> (entries: [TagUndoEntry], notice: String?) {
+        let loaded = BackupJSON.load([TagUndoEntry].self, from: url, manager: manager)
+        let notice: String?
+        switch loaded.source {
+        case .backup:
+            notice = "标签编辑撤销记录已从备份恢复。"
+        case .corrupt:
+            notice = "标签编辑撤销记录已损坏，无法读取。"
+        case .primary, .missing:
+            notice = nil
         }
+        guard let decoded = loaded.value else { return ([], notice) }
         // A store written with a larger limit must not exceed this one.
-        return Array(decoded.suffix(max(limit, 1)))
+        return (Array(decoded.suffix(max(limit, 1))), notice)
     }
 
     private static func save(_ entries: [TagUndoEntry], to url: URL, manager: FileManager) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(entries)
-        try manager.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try data.write(to: url, options: .atomic)
+        try BackupJSON.save(entries, to: url, manager: manager)
     }
 }
