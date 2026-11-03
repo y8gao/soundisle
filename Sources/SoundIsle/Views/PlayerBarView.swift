@@ -213,8 +213,7 @@ struct TrackCoverView: View {
         ZStack {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(theme.coverGradient)
-            Icons.coverNote
-                .foregroundColor(Color.white.opacity(0.55))
+            NoteIcon(size: 17, color: Color.white.opacity(0.7))
             if let url {
                 AsyncImage(
                     url: url,

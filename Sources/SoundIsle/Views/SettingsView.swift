@@ -72,6 +72,11 @@ struct SettingsView: View {
             model.refreshTranscodeCacheSize()
             lyricsEndpointText = settings.lyricsEndpoint ?? ""
             installOutsideClickMonitor()
+            // Don't let the endpoint field take the initial focus just because
+            // it is the first text field in the sheet.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                NSApp.keyWindow?.makeFirstResponder(nil)
+            }
         }
         .onDisappear {
             saveLyricsEndpoint()

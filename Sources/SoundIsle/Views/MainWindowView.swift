@@ -92,9 +92,12 @@ struct MainWindowView: View {
         ZStack {
             WindowDragArea()
             HStack(spacing: 12) {
-                Text("声屿")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(palette.text.opacity(0.8))
+                HStack(spacing: 7) {
+                    NoteIcon(size: 14, color: palette.text.opacity(0.85))
+                    Text("声屿")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(palette.text.opacity(0.85))
+                }
 
                 Spacer(minLength: 12)
 

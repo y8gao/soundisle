@@ -68,7 +68,7 @@ struct SidebarView: View {
             }
         }
         .frame(maxHeight: .infinity)
-        .background(theme.raisedFill.opacity(0.35))
+        .background(theme.panelTint.opacity(theme.isDark ? 0.30 : 0.58))
         .background(.ultraThinMaterial)
         .overlay(alignment: .trailing) {
             Rectangle()

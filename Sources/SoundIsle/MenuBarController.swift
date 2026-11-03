@@ -25,7 +25,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
-        let image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "声屿")
+        let image = NoteGlyph.templateImage(size: 16)
+            ?? NSImage(systemSymbolName: "music.note", accessibilityDescription: "声屿")
         image?.isTemplate = true
         statusItem.button?.image = image
         statusItem.button?.toolTip = "声屿"
