@@ -4,9 +4,25 @@ import SoundIsleCore
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// One source of truth for the list's five columns. Header buttons and every
+/// row use the same widths, so labels stay over their data at any window
+/// width. The compact target is 900pt: 190 sidebar + 36 outer padding leaves
+/// room for title to flex next to these fixed columns.
+enum TrackColumns {
+    static let leading: CGFloat = 24
+    static let spacing: CGFloat = 10
+    static let rowPadding: CGFloat = 8
+    static let artist: CGFloat = 110
+    static let album: CGFloat = 130
+    static let duration: CGFloat = 50
+    static let added: CGFloat = 82
+    static let rowHeight: CGFloat = 34
+}
+
 struct TrackListView: View {
     @ObservedObject var model: AppModel
     @Environment(\.theme) private var theme
+    @State private var contextMenuTrackID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,7 +51,8 @@ struct TrackListView: View {
                                 isPlaying: model.isPlaying,
                                 rowStyle: model.library.settings.rowStyle,
                                 artworkURL: model.library.artworkURL(for: track),
-                                onTap: { model.handleTrackClick(track.id) }
+                                onTap: { model.handleTrackClick(track.id) },
+                                onContextMenu: { contextMenuTrackID = track.id }
                             )
                             .onDrag {
                                 NSItemProvider(object: track.id.uuidString as NSString)
@@ -43,41 +60,22 @@ struct TrackListView: View {
                             .onDrop(of: [UTType.utf8PlainText], isTargeted: nil) { providers in
                                 handleReorder(providers, onto: track)
                             }
-                            .contextMenu {
-                                Button("编辑标签…") {
-                                    model.beginTagEdit(
-                                        trackIDs: model.contextTrackIDs(for: track.id)
-                                    )
-                                }
-                                Button("修复乱码标签…") {
-                                    model.promptRepairMojibake(
-                                        trackIDs: model.contextTrackIDs(for: track.id)
-                                    )
-                                }
-                                Button("整理文件…") {
-                                    model.beginOrganize(
-                                        trackIDs: model.contextTrackIDs(for: track.id)
-                                    )
-                                }
-                                Divider()
-                                if case .playlist(let playlistID) = model.selection {
-                                    Button("从播放列表移除") {
-                                        for id in model.contextTrackIDs(for: track.id) {
-                                            model.removeFromPlaylist(playlistID, trackID: id)
+                            .popover(
+                                isPresented: Binding(
+                                    get: { contextMenuTrackID == track.id },
+                                    set: { presented in
+                                        if !presented, contextMenuTrackID == track.id {
+                                            contextMenuTrackID = nil
                                         }
                                     }
-                                }
-                                if !model.playlists.playlists.isEmpty {
-                                    Menu("添加到播放列表") {
-                                        ForEach(model.playlists.playlists) { playlist in
-                                            Button(playlist.name) {
-                                                model.addToPlaylist(
-                                                    playlist.id,
-                                                    trackIDs: model.contextTrackIDs(for: track.id)
-                                                )
-                                            }
-                                        }
-                                    }
+                                ),
+                                arrowEdge: .bottom
+                            ) {
+                                TrackContextMenu(
+                                    model: model,
+                                    trackID: track.id
+                                ) {
+                                    contextMenuTrackID = nil
                                 }
                             }
                         }
@@ -134,19 +132,30 @@ struct TrackListView: View {
     }
 
     private var columnHeader: some View {
-        HStack(spacing: 2) {
-            sortButton("标题", .title)
-            sortButton("歌手", .artist)
-            sortButton("专辑", .album)
-            Spacer(minLength: 8)
-            sortButton("时长", .duration)
-            sortButton("添加时间", .dateAdded)
+        HStack(spacing: TrackColumns.spacing) {
+            Color.clear
+                .frame(width: TrackColumns.leading, height: 1)
+            sortButton("标题", .title, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            sortButton("歌手", .artist, alignment: .leading)
+                .frame(width: TrackColumns.artist, alignment: .leading)
+            sortButton("专辑", .album, alignment: .leading)
+                .frame(width: TrackColumns.album, alignment: .leading)
+            sortButton("时长", .duration, alignment: .trailing)
+                .frame(width: TrackColumns.duration, alignment: .trailing)
+            sortButton("添加时间", .dateAdded, alignment: .trailing)
+                .frame(width: TrackColumns.added, alignment: .trailing)
         }
+        .padding(.horizontal, TrackColumns.rowPadding)
         .padding(.horizontal, 18)
         .padding(.bottom, 6)
     }
 
-    private func sortButton(_ title: String, _ candidate: TrackSort) -> some View {
+    private func sortButton(
+        _ title: String,
+        _ candidate: TrackSort,
+        alignment: Alignment
+    ) -> some View {
         let active = model.sortsColumns && model.sort == candidate
         return Button {
             model.toggleSort(candidate)
@@ -159,12 +168,15 @@ struct TrackListView: View {
             }
             .font(.system(size: 10.5, weight: active ? .semibold : .regular))
             .foregroundColor(active ? theme.accentLight : theme.mutedText(0.45))
-            .padding(.horizontal, 7)
             .frame(height: 22)
-            .background(
-                active ? theme.accent.opacity(0.14) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
-            )
+            .background {
+                if active {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(theme.accent.opacity(0.14))
+                        .padding(.horizontal, -6)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: alignment)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -357,54 +369,81 @@ private struct TrackRow: View {
     let rowStyle: String
     let artworkURL: URL?
     let onTap: () -> Void
+    let onContextMenu: () -> Void
 
     @State private var isHovering = false
+
+    private static let addedFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     var body: some View {
         // A plain row instead of a `Button`: a Button swallows the drag
         // gesture, and dragging rows into playlists is required.
-        HStack(spacing: 10) {
+        HStack(spacing: TrackColumns.spacing) {
             leading
-                .frame(width: 24)
+                .frame(width: TrackColumns.leading)
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                    Text(track.title)
-                        .font(.system(size: 12.5, weight: isCurrent ? .semibold : .regular))
-                        .foregroundColor(titleColor)
-                        .lineLimit(1)
-                    if track.isMissing {
-                        Text("文件缺失")
-                            .font(.system(size: 9.5, weight: .medium))
-                            .foregroundColor(theme.warning)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(theme.warning.opacity(0.14), in: Capsule())
-                    }
+            HStack(spacing: 6) {
+                Text(track.title)
+                    .font(.system(size: 12.5, weight: isCurrent ? .semibold : .regular))
+                    .foregroundColor(titleColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+                if track.isMissing {
+                    Text("文件缺失")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundColor(theme.warning)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(theme.warning.opacity(0.14), in: Capsule())
+                        .fixedSize()
                 }
-                if !track.artist.isEmpty {
-                    Text(track.artist)
-                        .font(.system(size: 10.5))
-                        .foregroundColor(theme.mutedText(0.5))
-                        .lineLimit(1)
-                }
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 8)
+            Text(track.artist)
+                .font(.system(size: 10.5))
+                .foregroundColor(theme.mutedText(0.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: TrackColumns.artist, alignment: .leading)
+
+            Text(track.album)
+                .font(.system(size: 10.5))
+                .foregroundColor(theme.mutedText(0.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(width: TrackColumns.album, alignment: .leading)
 
             Text(TimeText.string(track.duration))
                 .font(.system(size: 10.5))
                 .monospacedDigit()
                 .foregroundColor(theme.mutedText(0.45))
-                .frame(width: 46, alignment: .trailing)
+                .frame(width: TrackColumns.duration, alignment: .trailing)
+
+            Text(Self.addedFormatter.string(from: track.modifiedAt))
+                .font(.system(size: 10))
+                .monospacedDigit()
+                .foregroundColor(theme.mutedText(0.4))
+                .frame(width: TrackColumns.added, alignment: .trailing)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .frame(minHeight: 36)
+        .padding(.horizontal, TrackColumns.rowPadding)
+        .frame(height: TrackColumns.rowHeight)
         .background(rowBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .onHover { isHovering = $0 }
+        // Overlay rather than background: the catcher claims only right-click
+        // events, so left-click play, drag and multi-select keep working.
+        .overlay {
+            RightClickCatcher(onRightClick: onContextMenu)
+        }
     }
 
     @ViewBuilder
@@ -431,6 +470,171 @@ private struct TrackRow: View {
         if isSelected { return theme.accent.opacity(0.09) }
         if isHovering { return theme.raisedFill }
         return .clear
+    }
+}
+
+// MARK: - Right-click catcher
+
+/// Claims right-clicks without stealing anything else. AppKit asks `hitTest`
+/// while dispatching an event, so returning nil for every non-right-mouse
+/// event leaves SwiftUI's tap and drag gestures untouched.
+private struct RightClickCatcher: NSViewRepresentable {
+    let onRightClick: () -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = CatcherView()
+        view.onRightClick = onRightClick
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? CatcherView)?.onRightClick = onRightClick
+    }
+
+    private final class CatcherView: NSView {
+        var onRightClick: (() -> Void)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp, .rightMouseDragged:
+                return super.hitTest(point)
+            default:
+                return nil
+            }
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            onRightClick?()
+        }
+    }
+}
+
+// MARK: - Track context menu
+
+/// Themed replacement for the system context menu. The popover owns dismissal
+/// (click-away and Esc); `onClose` also lets each action close it before
+/// opening a sheet or mutating the queue.
+private struct TrackContextMenu: View {
+    @ObservedObject var model: AppModel
+    let trackID: UUID
+    let onClose: () -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var hoveredID: String?
+
+    private var targetIDs: [UUID] { model.contextTrackIDs(for: trackID) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            action("pencil", "编辑标签…") {
+                model.beginTagEdit(trackIDs: targetIDs)
+            }
+            action("wand.and.stars", "修复乱码标签…") {
+                model.promptRepairMojibake(trackIDs: targetIDs)
+            }
+            action("folder", "整理文件…") {
+                model.beginOrganize(trackIDs: targetIDs)
+            }
+
+            separator
+
+            if case .playlist(let playlistID) = model.selection {
+                action("minus.circle", "从播放列表移除") {
+                    for id in targetIDs {
+                        model.removeFromPlaylist(playlistID, trackID: id)
+                    }
+                }
+                separator
+            }
+
+            playlistSection
+        }
+        .padding(5)
+        .frame(width: 240)
+        .glassPanel(cornerRadius: 10)
+        .shadow(
+            color: .black.opacity(theme.isDark ? 0.5 : 0.18),
+            radius: 16,
+            y: 6
+        )
+        .onExitCommand(perform: onClose)
+    }
+
+    private var playlistSection: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("添加到播放列表")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.6)
+                .foregroundColor(theme.mutedText(0.42))
+                .padding(.horizontal, 8)
+                .padding(.top, 3)
+                .padding(.bottom, 3)
+
+            if model.playlists.playlists.isEmpty {
+                Text("暂无播放列表")
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.mutedText(0.35))
+                    .padding(.horizontal, 8)
+                    .frame(height: 26)
+            } else {
+                ScrollView(showsIndicators: true) {
+                    VStack(spacing: 1) {
+                        ForEach(model.playlists.playlists) { playlist in
+                            action("music.note.list", playlist.name) {
+                                model.addToPlaylist(playlist.id, trackIDs: targetIDs)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: min(CGFloat(model.playlists.playlists.count) * 28, 168))
+            }
+        }
+    }
+
+    private var separator: some View {
+        Rectangle()
+            .fill(theme.hairline)
+            .frame(height: 1)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
+    }
+
+    private func action(
+        _ symbol: String,
+        _ title: String,
+        run: @escaping () -> Void
+    ) -> some View {
+        let key = "\(symbol)-\(title)"
+        return Button {
+            onClose()
+            run()
+        } label: {
+            HStack(spacing: 8) {
+                Icons.symbol(symbol, size: 11)
+                    .frame(width: 16)
+                Text(title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(theme.text.opacity(0.9))
+            .padding(.horizontal, 8)
+            .frame(height: 27)
+            .background(
+                hoveredID == key ? theme.accent.opacity(0.16) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                hoveredID = key
+            } else if hoveredID == key {
+                hoveredID = nil
+            }
+        }
     }
 }
 

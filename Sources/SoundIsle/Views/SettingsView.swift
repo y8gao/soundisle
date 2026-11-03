@@ -101,28 +101,9 @@ struct SettingsView: View {
 
     private var foldersSection: some View {
         sectionCard(icon: Icons.settingsFolders, title: "音乐文件夹") {
-            Text(model.folders.isEmpty ? "尚未导入文件夹。" : "已导入 \(model.folders.count) 个文件夹。")
+            Text("在左侧栏管理导入文件夹")
                 .font(.system(size: 11))
                 .foregroundColor(palette.mutedText(0.5))
-
-            ForEach(model.folders, id: \.self) { folder in
-                HStack(spacing: 8) {
-                    Text(folder.path)
-                        .font(.system(size: 10.5))
-                        .foregroundColor(palette.mutedText(0.42))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .help(folder.path)
-                    Spacer(minLength: 6)
-                    Button("移除") {
-                        if confirmRemoveFolder(folder) {
-                            folderNotice = model.removeFolder(folder)
-                        }
-                    }
-                    .font(.system(size: 10.5))
-                    .help("从曲库移除这个文件夹，不会删除磁盘文件")
-                }
-            }
 
             let missing = model.library.missingTracks
             if !missing.isEmpty {
@@ -182,20 +163,6 @@ struct SettingsView: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                Button("添加文件夹…") {
-                    model.importFolders(model.openFolders())
-                }
-                Button("重新扫描") {
-                    Task { await model.rescan() }
-                }
-                .disabled(model.isScanning)
-                if model.isScanning {
-                    Text("扫描中…")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(palette.mutedText(0.4))
-                }
-            }
             if let folderNotice {
                 Text(folderNotice)
                     .font(.system(size: 10.5))
@@ -528,17 +495,6 @@ struct SettingsView: View {
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .OK, let url = panel.url else { return }
         folderNotice = model.relocateTrack(track, to: url)
-    }
-
-    private func confirmRemoveFolder(_ folder: URL) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "移除音乐文件夹「\(folder.lastPathComponent)」？"
-        alert.informativeText = "只会从曲库移除该文件夹和其中的歌曲，磁盘上的音频文件不会被删除。"
-        alert.addButton(withTitle: "移除")
-        alert.addButton(withTitle: "取消")
-        let response = alert.runModal()
-        NSApp.keyWindow?.makeFirstResponder(nil)
-        return response == .alertFirstButtonReturn
     }
 
     private func confirmClearUndo() -> Bool {

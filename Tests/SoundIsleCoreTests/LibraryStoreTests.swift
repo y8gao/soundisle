@@ -341,6 +341,32 @@ final class LibraryStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testRescanFolderLeavesOtherFoldersAlone() async throws {
+        let otherRoot = tempDir.appendingPathComponent("library-other", isDirectory: true)
+        try fm.createDirectory(at: otherRoot, withIntermediateDirectories: true)
+        try makeFile("甲.mp3", in: libraryRoot)
+        try makeFile("乙.mp3", in: otherRoot)
+        let reader = StubReader()
+        reader.setMetadata([
+            "甲.mp3": AudioMetadata(title: "甲", duration: 10),
+            "乙.mp3": AudioMetadata(title: "乙", duration: 20),
+        ])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(libraryRoot, reader: reader)
+        await store.addFolder(otherRoot, reader: reader)
+        XCTAssertEqual(store.index.tracks.count, 2)
+
+        // The other folder's file vanished, but refreshing this folder must
+        // not inspect (or mark missing) anything outside its scope.
+        try fm.removeItem(at: otherRoot.appendingPathComponent("乙.mp3"))
+        await store.rescan(folder: libraryRoot, reader: reader)
+        XCTAssertFalse(try track(named: "乙", in: store).isMissing)
+
+        await store.rescan(folder: otherRoot, reader: reader)
+        XCTAssertTrue(try track(named: "乙", in: store).isMissing)
+    }
+
+    @MainActor
     func testRescanUpdatesChangedTrackButKeepsID() async throws {
         let url = try makeFile("变化.mp3")
         let reader = StubReader()

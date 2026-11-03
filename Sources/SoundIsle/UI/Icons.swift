@@ -32,11 +32,11 @@ enum Icons {
     static var shuffle: Image { symbol("shuffle", size: 13) }
 
     // Player bar
-    static func volume(size: CGFloat = 18) -> Image { symbol("speaker.wave.2", size: size) }
-    static func lyrics(size: CGFloat = 18) -> Image { symbol("text.alignleft", size: size) }
-    static func lyricsLock(locked: Bool, size: CGFloat = 13) -> Image {
-        symbol(locked ? "lock.fill" : "lock.open", size: size)
+    static func volume(muted: Bool = false, low: Bool = false, size: CGFloat = 18) -> Image {
+        let name = muted ? "speaker.slash" : (low ? "speaker.wave.1" : "speaker.wave.3")
+        return symbol(name, size: size)
     }
+    static func lyrics(size: CGFloat = 18) -> Image { symbol("text.alignleft", size: size) }
     static var coverNote: Image { symbol("music.note", size: 17) }
 
     // Sidebar
@@ -45,7 +45,6 @@ enum Icons {
     static var playlist: Image { symbol("music.note.list", size: 12) }
     static var recent: Image { symbol("clock", size: 12) }
     static var plus: Image { symbol("plus", size: 11, weight: .semibold) }
-    static var addFolder: Image { symbol("folder.badge.plus", size: 13) }
 
     // Chrome
     static var search: Image { symbol("magnifyingglass", size: 12) }

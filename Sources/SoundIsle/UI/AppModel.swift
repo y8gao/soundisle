@@ -917,6 +917,17 @@ final class AppModel: ObservableObject {
         prepareLibraryFormats()
     }
 
+    /// Sidebar refresh on a single folder row. Uses the folder-scoped core
+    /// rescan so other imported folders are never touched.
+    func rescanFolder(_ folder: URL) async {
+        guard !isScanning else { return }
+        isScanning = true
+        await library.rescan(folder: folder)
+        isScanning = false
+        refreshFromLibrary()
+        prepareLibraryFormats()
+    }
+
     private func refreshFromLibrary() {
         tracks = library.index.tracks
         // Folder removal prunes playlist entries inside `LibraryStore`; mirror

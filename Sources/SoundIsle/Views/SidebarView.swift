@@ -1,3 +1,4 @@
+import AppKit
 import SoundIsleCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -31,20 +32,22 @@ struct SidebarView: View {
                         model.select(.recentlyAdded)
                     }
 
-                    sectionLabel("导入文件夹").padding(.top, 12)
+                    foldersHeader
                     if model.folders.isEmpty {
                         emptyRow("尚未导入文件夹")
                     } else {
                         ForEach(model.folders, id: \.self) { folder in
-                            libraryRow(
+                            FolderRow(
                                 title: folder.lastPathComponent,
-                                icon: Icons.folder,
                                 count: model.trackCount(in: folder),
-                                isSelected: selection == .folder(folder)
-                            ) {
-                                model.select(.folder(folder))
-                            }
-                            .help(folder.path)
+                                isSelected: selection == .folder(folder),
+                                path: folder.path,
+                                onSelect: { model.select(.folder(folder)) },
+                                onRefresh: {
+                                    Task { await model.rescanFolder(folder) }
+                                },
+                                onRemove: { confirmRemoveFolder(folder) }
+                            )
                         }
                     }
 
@@ -60,29 +63,6 @@ struct SidebarView: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 10)
             }
-
-            Spacer(minLength: 0)
-
-            Button {
-                model.importFolders(model.openFolders())
-            } label: {
-                HStack(spacing: 7) {
-                    Icons.addFolder
-                    Text("添加文件夹")
-                    Spacer(minLength: 0)
-                }
-                .font(.system(size: 12))
-                .foregroundColor(theme.text.opacity(0.7))
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(model.isScanning)
-            .opacity(model.isScanning ? 0.45 : 1)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 12)
-            .help("从磁盘选择音乐文件夹")
         }
         .frame(maxHeight: .infinity)
         .background(theme.raisedFill.opacity(0.35))
@@ -92,6 +72,27 @@ struct SidebarView: View {
                 .fill(theme.hairline)
                 .frame(width: 1)
         }
+    }
+
+    private var foldersHeader: some View {
+        HStack(spacing: 0) {
+            sectionLabel("导入文件夹")
+            Spacer(minLength: 4)
+            Button {
+                model.importFolders(model.openFolders())
+            } label: {
+                Icons.plus
+                    .foregroundColor(theme.mutedText(0.55))
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isScanning)
+            .opacity(model.isScanning ? 0.45 : 1)
+            .help("导入文件夹")
+            .padding(.trailing, 4)
+        }
+        .padding(.top, 12)
     }
 
     private var playlistsHeader: some View {
@@ -172,6 +173,20 @@ struct SidebarView: View {
         .padding(.vertical, 5)
     }
 
+    /// Neutral copy: the folder and its rows leave the library, the audio
+    /// files stay exactly where they are on disk.
+    private func confirmRemoveFolder(_ folder: URL) {
+        let alert = NSAlert()
+        alert.messageText = "从曲库移除「\(folder.lastPathComponent)」？"
+        alert.informativeText = "只会从曲库移除这个文件夹和其中的歌曲，磁盘上的音频文件不会被删除。"
+        alert.addButton(withTitle: "移除")
+        alert.addButton(withTitle: "取消")
+        let response = alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .alertFirstButtonReturn else { return }
+        model.removeFolder(folder)
+    }
+
     private func sectionLabel(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
@@ -220,5 +235,70 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Folder row
+
+/// Imported-folder row with hover actions. A plain tap row (instead of a
+/// Button label) keeps the refresh/trash buttons independently clickable.
+private struct FolderRow: View {
+    @Environment(\.theme) private var theme
+    let title: String
+    let count: Int
+    let isSelected: Bool
+    let path: String
+    let onSelect: () -> Void
+    let onRefresh: () -> Void
+    let onRemove: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Icons.folder
+                .frame(width: 16)
+            Text(title)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 4)
+
+            if isHovering {
+                iconButton(Icons.refresh, help: "重新扫描此文件夹", action: onRefresh)
+                iconButton(Icons.symbol("trash", size: 11), help: "移除文件夹（不删除文件）", action: onRemove)
+            } else {
+                Text("\(count)")
+                    .font(.system(size: 10.5))
+                    .monospacedDigit()
+                    .foregroundColor(theme.mutedText(isSelected ? 0.7 : 0.4))
+            }
+        }
+        .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
+        .foregroundColor(isSelected ? theme.accentLight : theme.text.opacity(0.64))
+        .padding(.horizontal, 9)
+        .frame(height: 30)
+        .background(
+            isSelected ? theme.accent.opacity(0.16) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
+        .onHover { isHovering = $0 }
+        .help(path)
+    }
+
+    private func iconButton(
+        _ icon: Image,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            icon
+                .foregroundColor(theme.mutedText(0.6))
+                .frame(width: 18, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }

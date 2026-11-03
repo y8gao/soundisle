@@ -136,13 +136,39 @@ public final class LibraryStore {
     }
 
     public func rescan(reader: MetadataReading = AVFoundationMetadataReader()) async {
-        guard !index.folders.isEmpty else {
-            unreadableURLs = []
+        await rescan(folders: index.folders, scoped: false, reader: reader)
+    }
+
+    /// Rescans one imported folder. Tracks outside it are left exactly as they
+    /// were, so refreshing one folder never marks unrelated files missing.
+    public func rescan(
+        folder: URL,
+        reader: MetadataReading = AVFoundationMetadataReader()
+    ) async {
+        let folder = folder.standardizedFileURL
+        guard index.folders.contains(where: { $0.standardizedFileURL == folder }) else { return }
+        await rescan(folders: [folder], scoped: true, reader: reader)
+    }
+
+    private func rescan(
+        folders: [URL],
+        scoped: Bool,
+        reader: MetadataReading
+    ) async {
+        guard !folders.isEmpty else {
+            if !scoped { unreadableURLs = [] }
             return
         }
 
-        let result = await LibraryScanner.scan(folders: index.folders, reader: reader)
-        unreadableURLs = result.unreadable
+        let prefixes = folders.map { $0.standardizedFileURL.path + "/" }
+        func inScope(_ url: URL) -> Bool {
+            !scoped || prefixes.contains { url.standardizedFileURL.path.hasPrefix($0) }
+        }
+
+        let result = await LibraryScanner.scan(folders: folders, reader: reader)
+        unreadableURLs = scoped
+            ? unreadableURLs.filter { !inScope($0) } + result.unreadable
+            : result.unreadable
         let unreadablePaths = Set(result.unreadable.map { $0.standardizedFileURL.path })
 
         var existingByPath: [String: Track] = [:]
@@ -187,8 +213,10 @@ public final class LibraryStore {
         var tracks = kept + rebuilt
         for track in index.tracks where !scannedPaths.contains(track.url.standardizedFileURL.path) {
             var track = track
-            // An unreadable file still exists; only vanished files are missing.
-            if !unreadablePaths.contains(track.url.standardizedFileURL.path) {
+            // A folder-scoped rescan only judges files it actually scanned;
+            // everything outside the folder is carried over untouched.
+            if inScope(track.url),
+               !unreadablePaths.contains(track.url.standardizedFileURL.path) {
                 track.isMissing = true
             }
             tracks.append(track)

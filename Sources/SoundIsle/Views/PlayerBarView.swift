@@ -28,20 +28,17 @@ struct PlayerBarView: View {
     var body: some View {
         HStack(spacing: 0) {
             trackInfo
-                .frame(width: 200, alignment: .leading)
-
-            modeControls
-                .padding(.leading, 10)
-
-            Spacer(minLength: 0)
+                .frame(width: 220, alignment: .leading)
 
             centerColumn
-                .frame(width: 360)
+                .frame(minWidth: 280, maxWidth: 460, alignment: .leading)
+                .layoutPriority(1)
+                .padding(.leading, 16)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 12)
 
             rightControls
-                .frame(width: 176, alignment: .trailing)
+                .frame(width: 210, alignment: .trailing)
         }
         .padding(.horizontal, 18)
         .frame(height: 76)
@@ -96,23 +93,30 @@ struct PlayerBarView: View {
 
     // MARK: Playback modes
 
-    private var modeControls: some View {
-        HStack(spacing: 2) {
-            modeButton(.sequential, icon: Icons.sequential, help: "顺序播放")
-            modeButton(.repeatAll, icon: Icons.repeatAll, help: "列表循环")
-            modeButton(.repeatOne, icon: Icons.repeatOne, help: "单曲循环")
-            modeButton(.shuffle, icon: Icons.shuffle, help: "随机播放")
+    /// One button instead of four: click cycles sequential → repeat-all →
+    /// repeat-one → shuffle, and the glyph/help always show the current mode.
+    private var modeIcon: Image {
+        switch model.queue.mode {
+        case .sequential: return Icons.sequential
+        case .repeatAll: return Icons.repeatAll
+        case .repeatOne: return Icons.repeatOne
+        case .shuffle: return Icons.shuffle
         }
     }
 
-    private func modeButton(_ mode: PlaybackMode, icon: Image, help: String) -> some View {
-        PlaybackModeButton(
-            icon: icon,
-            help: help,
-            isSelected: model.queue.mode == mode
-        ) {
-            model.setPlaybackMode(mode)
+    private var modeHelp: String {
+        switch model.queue.mode {
+        case .sequential: return "顺序播放"
+        case .repeatAll: return "列表循环"
+        case .repeatOne: return "单曲循环"
+        case .shuffle: return "随机播放"
         }
+    }
+
+    private func cyclePlaybackMode() {
+        let order: [PlaybackMode] = [.sequential, .repeatAll, .repeatOne, .shuffle]
+        let index = order.firstIndex(of: model.queue.mode) ?? 0
+        model.setPlaybackMode(order[(index + 1) % order.count])
     }
 
     // MARK: Center
@@ -146,6 +150,7 @@ struct PlayerBarView: View {
                 }
                 .help("下一首")
             }
+            .frame(maxWidth: .infinity, alignment: .center)
 
             // Isolated: engine position updates re-render only this row. The
             // spectrum lives in its own view so audio-rate updates never touch
@@ -157,24 +162,21 @@ struct PlayerBarView: View {
     // MARK: Right
 
     private var rightControls: some View {
-        HStack(spacing: 10) {
-            Icons.volume()
-                .foregroundColor(theme.text.opacity(0.75))
+        HStack(spacing: 8) {
+            PlayerIconButton(icon: modeIcon, size: 28) {
+                cyclePlaybackMode()
+            }
+            .help(modeHelp)
+            .accessibilityLabel(modeHelp)
 
-            VolumeSlider(value: $model.volume)
-                .frame(width: 46, height: 14)
+            VolumeButton(volume: $model.volume)
 
             PlayerIconButton(icon: Icons.lyrics(), size: 30) {
                 model.toggleLyricsVisibility()
             }
             .help(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
-
-            PlayerIconButton(icon: Icons.lyricsLock(locked: model.isLyricsLocked, size: 12), size: 26) {
-                model.toggleLyricsLock()
-            }
-            .help(model.isLyricsLocked ? "解锁歌词" : "锁定歌词")
         }
-        .opacity(0.8)
+        .opacity(0.85)
     }
 }
 
@@ -248,7 +250,8 @@ private struct PlayerProgressView: View {
                 duration: shownDuration,
                 onSeek: { model.seek(to: $0) }
             )
-            .frame(width: 360, height: 14)
+            .frame(maxWidth: .infinity)
+            .frame(height: 14)
 
             HStack(spacing: 0) {
                 Text(TimeText.string(shownPosition))
@@ -258,8 +261,9 @@ private struct PlayerProgressView: View {
             .font(.system(size: 9.5))
             .monospacedDigit()
             .foregroundColor(theme.text.opacity(0.72))
-            .frame(width: 360)
+            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
         // Only position/duration drive this row. Observing the whole engine
         // would re-render it at the spectrum's ~20 fps.
         .onReceive(engine.$position) { position = $0 }
@@ -293,34 +297,6 @@ private struct MainSpectrumView: View {
 }
 
 // MARK: - Buttons
-
-private struct PlaybackModeButton: View {
-    @Environment(\.theme) private var theme
-    let icon: Image
-    let help: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            icon
-                .foregroundColor(
-                    isSelected ? theme.accentLight : theme.mutedText(isHovering ? 0.9 : 0.45)
-                )
-                .frame(width: 24, height: 24)
-                .background(
-                    isSelected ? theme.accent.opacity(0.18) : (isHovering ? theme.raisedFill : Color.clear),
-                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .help(help)
-    }
-}
 
 private struct PlayerIconButton: View {
     @Environment(\.theme) private var theme
@@ -399,32 +375,118 @@ private struct ProgressSlider: View {
     }
 }
 
-private struct VolumeSlider: View {
+// MARK: - Volume
+
+/// Speaker button with a popover holding the vertical slider and mute toggle.
+/// `lastVolume` makes mute reversible without a second persisted field.
+private struct VolumeButton: View {
+    @Environment(\.theme) private var theme
+    @Binding var volume: Double
+
+    @State private var isPresented = false
+    @State private var isHovering = false
+    @State private var lastVolume: Double = 0.8
+
+    private var isMuted: Bool { volume <= 0.0001 }
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Icons.volume(muted: isMuted, low: volume < 0.34)
+                .foregroundColor(theme.text.opacity(isHovering ? 1 : 0.86))
+                .frame(width: 28, height: 28)
+                .background(
+                    isHovering || isPresented ? theme.raisedFill : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(isMuted ? "取消静音" : "音量")
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            VolumePopover(
+                volume: $volume,
+                isMuted: isMuted,
+                onToggleMute: toggleMute
+            )
+        }
+    }
+
+    private func toggleMute() {
+        if isMuted {
+            volume = lastVolume > 0.0001 ? lastVolume : 0.8
+        } else {
+            lastVolume = volume
+            volume = 0
+        }
+    }
+}
+
+private struct VolumePopover: View {
+    @Environment(\.theme) private var theme
+    @Binding var volume: Double
+    let isMuted: Bool
+    let onToggleMute: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            VerticalVolumeSlider(value: $volume)
+                .frame(width: 18, height: 108)
+
+            Button(action: onToggleMute) {
+                Icons.volume(muted: isMuted, low: false, size: 14)
+                    .foregroundColor(theme.text.opacity(0.82))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(isMuted ? "取消静音" : "静音")
+
+            Text("\(Int((volume * 100).rounded()))%")
+                .font(.system(size: 9.5))
+                .monospacedDigit()
+                .foregroundColor(theme.mutedText(0.5))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(width: 58)
+        .glassPanel(cornerRadius: 10)
+    }
+}
+
+private struct VerticalVolumeSlider: View {
     @Environment(\.theme) private var theme
     @Binding var value: Double
 
     var body: some View {
         GeometryReader { geometry in
-            let width = max(geometry.size.width, 1)
+            let height = max(geometry.size.height, 1)
             let progress = min(max(value, 0), 1)
 
-            ZStack(alignment: .leading) {
+            ZStack(alignment: .bottom) {
                 Capsule()
                     .fill(theme.sliderTrack)
-                    .frame(height: 3)
+                    .frame(width: 4, height: height)
                 Capsule()
                     .fill(theme.text.opacity(0.65))
-                    .frame(width: width * progress, height: 3)
+                    .frame(width: 4, height: height * progress)
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 10, height: 10)
+                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                    .offset(y: -(height - 10) * progress)
             }
-            .frame(maxHeight: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in
-                        value = min(max(gesture.location.x / width, 0), 1)
+                        let position = Double(1 - gesture.location.y / height)
+                        value = min(max(position, 0), 1)
                     }
             )
         }
-        .frame(width: 46, height: 14)
     }
 }
