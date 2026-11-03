@@ -150,7 +150,8 @@ struct PlayerBarView: View {
                 }
                 .help("下一首")
             }
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 6)
 
             // Isolated: engine position updates re-render only this row. The
             // spectrum lives in its own view so audio-rate updates never touch
