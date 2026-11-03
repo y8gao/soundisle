@@ -1,9 +1,9 @@
 import Foundation
 
 /// Repairs text that was decoded with Latin-1 even though the file stored
-/// UTF-8 or GB18030 Chinese. A mis-decoded string maps its original bytes
-/// one-to-one to Unicode scalars U+0000...U+00FF, so the bytes can be
-/// recovered and decoded again.
+/// UTF-8 or GB18030 Chinese. Most mis-decoded bytes map one-to-one onto
+/// Unicode scalars U+0000...U+00FF; decoders that widen 0x80...0x9F through
+/// Windows-1252 are handled by the byte map below.
 public enum MojibakeRepair {
     private static let gb18030 = String.Encoding(
         rawValue: CFStringConvertEncodingToNSStringEncoding(
@@ -11,10 +11,11 @@ public enum MojibakeRepair {
         )
     )
 
-    /// TagLib decodes malformed ISO-8859-1 tag bytes in 0x80...0x9F with the
-    /// Windows-1252 table, so a real UTF-8 mis-decode contains U+2039, U+0178
-    /// and friends rather than C1 controls. Map those scalars back to the
-    /// original byte before trying to decode.
+    /// Real-world mojibake can contain Windows-1252-shaped scalars (U+2039,
+    /// U+0178, ...) because the text passed through a CP1252 decode before it
+    /// reached us. TagLib 1.13.1 itself widens strictly as ISO-8859-1; the
+    /// observed CP1252 shape comes from an earlier/AVFoundation decode. Accept
+    /// that range and map it back to the original byte before decoding.
     private static let windows1252ToByte: [UInt32: UInt8] = [
         0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84,
         0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88,
@@ -56,6 +57,10 @@ public enum MojibakeRepair {
         for candidate in [String(data: Data(bytes), encoding: .utf8),
                           String(data: Data(bytes), encoding: gb18030)] {
             guard let candidate, asciiOnly(candidate) == originalASCII else { continue }
+            // A single accidental Han character is not enough: "Beyoncé’s"
+            // decodes to one Han character while keeping its ASCII run, and
+            // must stay untouched. Genuine Chinese text has at least two.
+            guard hanCount(candidate) >= 2 else { continue }
             let ratio = chineseRatio(candidate)
             guard ratio > originalRatio else { continue }
             if best == nil || ratio > best!.ratio {
@@ -85,6 +90,26 @@ public enum MojibakeRepair {
             if isChinese(scalar) { chinese += 1 }
         }
         return nonASCII == 0 ? 0 : Double(chinese) / Double(nonASCII)
+    }
+
+    /// Han ideographs only. Punctuation and fullwidth forms do not count
+    /// toward the two-character floor that rejects one-off false positives.
+    private static func hanCount(_ text: String) -> Int {
+        text.unicodeScalars.reduce(0) { count, scalar in
+            isHan(scalar) ? count + 1 : count
+        }
+    }
+
+    private static func isHan(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3400...0x4DBF,   // CJK Extension A
+             0x4E00...0x9FFF,   // CJK Unified Ideographs
+             0xF900...0xFAFF,   // CJK Compatibility Ideographs
+             0x20000...0x2FA1F: // Extensions B-F
+            return true
+        default:
+            return false
+        }
     }
 
     private static func isChinese(_ scalar: Unicode.Scalar) -> Bool {

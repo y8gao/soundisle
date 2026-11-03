@@ -14,7 +14,9 @@
 | `bash Scripts/build-app.sh --universal` | 通过 | 两次 `swift build` 后 `lipo -create`；输出 `架构: x86_64 arm64` |
 | 通用二进制 | 通过 | `lipo -archs build/声屿.app/Contents/MacOS/SoundIsle` → `x86_64 arm64` |
 | 版本与图标 | 通过 | Info.plist `CFBundleShortVersionString=0.1.0`、`CFBundleVersion=1`、`CFBundleIconFile=AppIcon`；`Contents/Resources/AppIcon.icns` 存在（330 KB） |
-| 签名 | 通过 | `codesign -dv` → `Signature=adhoc`、`Format=app bundle with Mach-O universal (x86_64 arm64)` |
+| 签名 | 通过 | `codesign -dv` → `Signature=adhoc`、`Format=app bundle with Mach-O universal (x86_64 arm64)`；`codesign --verify --deep --strict build/声屿.app` 退出码 0 |
+
+> **最终产物状态（交付前最后一次构建）**：`build/声屿.app` 为通用二进制，`lipo -archs` 输出 `x86_64 arm64`，`codesign --verify --deep --strict` 通过。交付前的最后一步必须是 `bash Scripts/build-app.sh --universal`；普通 `bash Scripts/build-app.sh` 只生成当前机器架构，不能作为最终产物。
 
 ## 十项验收
 
@@ -30,7 +32,7 @@
 | 6 | 标签：改单曲、批量改、乱码修复、撤销 | 部分通过 | 单曲：把临时副本标题改为「验收标题A」，`ffprobe` 读到新标题且列表即时更新；撤销：设置中「撤销最近一次标签编辑」后文件标题标签被移除。乱码修复：对真实乱码文件点击「修复乱码」显示 `修复预览：天空之城`，应用并保存后 `ffprobe` 读到 `title=天空之城`。批量编辑未完成手工操作（UI 多选自动化受限），由 `TagServiceTests`/`TagEditUndoStoreTests` 覆盖。另确认无 ID3v2 的 WAV 显示只读提示 |
 | 7 | 整理：预览、移动、冲突编号、撤销 | 通过 | 预览显示源/目标路径；目标目录预置同名文件时显示 `1 个同名冲突已自动编号`、目标为 `标签测试二 (2).mp3`、标记「同名已避让」；执行后源文件消失、目标文件生成；文件菜单「撤销上次整理」后源文件恢复、新建副本删除，状态显示 `已恢复 1 个文件到原位置。` |
 | 8 | 主题：六套切换、跟随系统、自定义强调色 | 通过 | 依次点击六套皮肤，`settings.json` 记录 `deepBlue / morning / inkAmber / celadon / berry / seaSalt`，界面同步变色；明暗模式记录 `light / dark / system`；自定义强调色打开系统颜色面板，「恢复默认」后 `customAccentHex` 为空。具体色值换算由 `ThemePaletteTests` 覆盖 |
-| 9 | 性能：空闲 CPU < 1%、播放 < 3%、内存 < 150MB | 通过 | `top -l 4 -s 2`：空闲 0.3–0.4% CPU；播放 mp3 时 1.7–2.0% CPU；`ps` RSS 约 94 MB，`top` 常驻约 48 MB，均低于 150 MB。未开启频谱；开启频谱会增加少量 CPU，未纳入本次门槛 |
+| 9 | 性能：空闲 CPU < 1%、播放 < 3%、内存 < 150MB | 通过 | 采样工具为 `top -l 4 -s 2 -pid` 与 `ps`，**未使用「活动监视器」**（命令行环境无法驱动其界面）。空闲 0.3–0.4% CPU；播放 mp3 时 1.7–2.0% CPU；`ps` RSS 约 94 MB，`top` 常驻约 48 MB，均低于 150 MB。未开启频谱；开启频谱会增加少量 CPU，未纳入本次门槛 |
 | 10 | 杀进程重启后播放列表与设置不丢失；写坏 `library.json` 后播放列表仍在 | 通过 | 正常退出重启后播放列表「工作时听的」2 首、设置与上次曲目/位置均恢复。备份数据目录后，将 `library.json` 与 `library.json.bak` 都写入非法内容再启动：曲库为空，但侧栏仍显示「工作时听的 2」，`playlists.json` 与 `settings.json` 保持完整；测试后已从备份恢复 |
 
 ## 未能完全手工验证 / 已知问题

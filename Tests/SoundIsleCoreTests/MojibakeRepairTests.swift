@@ -40,6 +40,9 @@ final class MojibakeRepairTests: XCTestCase {
         // a string with ASCII letters is real text, not mis-decoded Chinese.
         XCTAssertNil(MojibakeRepair.repaired("Mötley Crüe"))
         XCTAssertNil(MojibakeRepair.repaired("café"))
+        // A single accidental Han character (accent + typographic quote) is
+        // not enough to rewrite a real title.
+        XCTAssertNil(MojibakeRepair.repaired("Beyoncé’s"))
     }
 
     func testRepairKeepsASCIIPrefix() {

@@ -71,5 +71,5 @@ bash Scripts/build-app.sh
 - 没有 ID3v2 标签块的 WAV 为只读（TagLib 1.13 无法为其新建 ID3v2 块）。
 - WMA/ASF 的「专辑歌手」与封面字段为只读。
 - 应用使用 ad-hoc 签名，未做公证；首次打开可能需要右键「打开」，或执行 `xattr -dr com.apple.quarantine build/声屿.app`。每次重新构建后系统权限记录可能重置。
-- 应用不采集麦克风输入。首次创建音频引擎时 macOS 可能弹出麦克风权限请求（AVAudioEngine 的系统行为），选择「不允许」不影响播放。
+- 应用不采集麦克风输入，也没有安装输入节点或输入 tap，`Info.plist` 未声明 `NSMicrophoneUsageDescription`。如果 macOS 仍然弹出麦克风权限请求，选择「不允许」不影响播放。
 - 歌词悬浮窗与迷你窗默认在屏幕录制/截图中隐藏；可在设置中关闭该行为。
