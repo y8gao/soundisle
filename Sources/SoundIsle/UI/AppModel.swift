@@ -110,6 +110,7 @@ final class AppModel: ObservableObject {
     private var customAccentSaveTask: Task<Void, Never>?
     private var lyricsOpacitySaveTask: Task<Void, Never>?
     private var keyMonitor: Any?
+    private var searchFocusMonitor: Any?
     private var didStart = false
     /// Anchor row for Shift-click range selection.
     private var selectionAnchorID: UUID?
@@ -170,6 +171,7 @@ final class AppModel: ObservableObject {
         observeEngine()
         loadLyrics(for: currentTrack)
         installKeyMonitor()
+        installSearchFocusMonitor()
         refreshTranscodeCacheSize()
         applyAppearance()
 
@@ -190,6 +192,7 @@ final class AppModel: ObservableObject {
         customAccentSaveTask?.cancel()
         lyricsOpacitySaveTask?.cancel()
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        if let searchFocusMonitor { NSEvent.removeMonitor(searchFocusMonitor) }
         saveTimer?.invalidate()
     }
 
@@ -1926,6 +1929,38 @@ final class AppModel: ObservableObject {
         pendingTranscodeTrack = nil
     }
 
+    /// Clicking anywhere outside a text field resigns the search field, so
+    /// playback shortcuts work again after the user has searched something.
+    private func installSearchFocusMonitor() {
+        searchFocusMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { [weak self] event in
+            guard let self,
+                  self.isSearchFocused,
+                  let window = event.window,
+                  Self.isMainContentWindow(window) else { return event }
+            let hit = window.contentView?.hitTest(event.locationInWindow)
+            if !Self.isTextInput(hit) {
+                self.endSearchFocus()
+                window.makeFirstResponder(nil)
+            }
+            return event
+        }
+    }
+
+    private static func isMainContentWindow(_ window: NSWindow) -> Bool {
+        !(window is NSPanel) && !window.isSheet && window.canBecomeMain
+    }
+
+    private static func isTextInput(_ view: NSView?) -> Bool {
+        var current = view
+        while let candidate = current {
+            if candidate is NSTextField || candidate is NSTextView {
+                return true
+            }
+            current = candidate.superview
+        }
+        return false
+    }
+
     private func installKeyMonitor() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -1955,6 +1990,9 @@ final class AppModel: ObservableObject {
             .intersection([.command, .option, .control, .shift])
         if commandChord == .command, !event.isARepeat {
             switch event.keyCode {
+            case 3: // ⌘F
+                requestSearchFocus()
+                return true
             case 123: // ⌘←
                 previous()
                 return true

@@ -53,6 +53,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.captureMainWindow()
         }
+        // SwiftUI installs its default menus after launch; trim once the menu
+        // has settled and again on activation as a safety net.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.trimMainMenu()
+        }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.trimMainMenu()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -91,6 +102,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// mini player. Returning to the main window goes through `showMainWindow`.
     func showMiniPlayer() {
         model.showMiniPlayer()
+    }
+
+    /// SwiftUI's default File/Edit/View/Window/Help menus are noise for this
+    /// player. Keep the app menu plus the custom 播放/歌词/整理 menus.
+    private func trimMainMenu() {
+        let unwanted: Set<String> = ["File", "Edit", "View", "Window", "Help"]
+        NSApp.mainMenu?.items.removeAll { unwanted.contains($0.title) }
     }
 
     // MARK: - Main window tracking

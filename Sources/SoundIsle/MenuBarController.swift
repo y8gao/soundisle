@@ -47,9 +47,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(trackItem)
         menu.addItem(.separator())
 
-        addItem(model.isPlaying ? "暂停" : "播放", action: #selector(togglePlayPause))
-        addItem("上一首", action: #selector(previous))
-        addItem("下一首", action: #selector(next))
+        addItem(model.isPlaying ? "暂停（空格）" : "播放（空格）", action: #selector(togglePlayPause))
+        addItem("上一首（⌘←）", action: #selector(previous))
+        addItem("下一首（⌘→）", action: #selector(next))
         menu.addItem(.separator())
 
         // One toggle instead of two items: the mini and the main window are

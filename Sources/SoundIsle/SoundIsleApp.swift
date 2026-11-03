@@ -32,8 +32,9 @@ struct SoundIsleApp: App {
 
 /// Mirrors the menu-bar enablement so 恢复自动匹配 and 重试匹配 are not offered
 /// when they cannot do anything.
+@MainActor
 private struct LyricsCommands: Commands {
-    @ObservedObject var model: AppModel
+    let model: AppModel
 
     var body: some Commands {
         CommandMenu("歌词") {
@@ -57,11 +58,12 @@ private struct LyricsCommands: Commands {
 
 /// 「撤销上次整理」 lives in the File menu so it is reachable after the
 /// preview sheet closes. Observed so the item enables when a plan is recorded.
+@MainActor
 private struct FileOrganizerCommands: Commands {
-    @ObservedObject var model: AppModel
+    let model: AppModel
 
     var body: some Commands {
-        CommandGroup(after: .newItem) {
+        CommandMenu("整理") {
             Button("撤销上次整理") {
                 model.undoLastOrganize()
             }
@@ -72,8 +74,9 @@ private struct FileOrganizerCommands: Commands {
 
 /// Playback menu makes the shortcuts discoverable. The actual key handling
 /// lives in AppModel's monitor so Space/⌘←/⌘→ never fire while typing.
+@MainActor
 private struct PlaybackCommands: Commands {
-    @ObservedObject var model: AppModel
+    let model: AppModel
 
     var body: some Commands {
         CommandMenu("播放") {
