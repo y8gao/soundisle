@@ -446,6 +446,25 @@ final class FileOrganizerTests: XCTestCase {
         })
     }
 
+    func testApplyReportsProgressForEveryFile() throws {
+        let first = try makeFile("a.mp3", in: libraryDir)
+        let second = try makeFile("b.mp3", in: libraryDir)
+        let organizer = makeOrganizer()
+        let items = organizer.plan(
+            [motherTrack(url: first), motherTrack(url: second)],
+            template: motherTemplate,
+            root: destinationRoot
+        )
+        var progress: [(completed: Int, total: Int)] = []
+
+        try organizer.apply(items, copy: true) { completed, total in
+            progress.append((completed, total))
+        }
+
+        XCTAssertEqual(progress.map(\.completed), [1, 2])
+        XCTAssertEqual(progress.map(\.total), [2, 2])
+    }
+
     // MARK: - Corrupt undo history
 
     func testOrganizeHistoryRecoversFromBackup() throws {
