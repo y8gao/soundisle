@@ -29,6 +29,12 @@ struct ThemePalette {
 
     var isDark: Bool { tokens.isDark }
 
+    /// Secondary text/icons stay subtle in dark mode but are raised on light
+    /// backgrounds, where opacity 0.4–0.55 is only about 2.6–3.3:1 contrast.
+    func mutedText(_ base: Double) -> Color {
+        text.opacity(isDark ? base : max(base, 0.62))
+    }
+
     init(preset: ThemePreset, tokens: ThemeTokens) {
         self.preset = preset
         self.tokens = tokens

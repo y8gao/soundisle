@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 @MainActor
 struct TagEditorView: View {
     @Environment(\.colorScheme) private var colorScheme
-    let model: AppModel
+    @ObservedObject var model: AppModel
     let tracks: [Track]
 
     @Environment(\.dismiss) private var dismiss
@@ -46,7 +46,7 @@ struct TagEditorView: View {
     @State private var initialFields: TagFields?
 
     init(model: AppModel, tracks: [Track]) {
-        self.model = model
+        _model = ObservedObject(wrappedValue: model)
         self.tracks = tracks
         self.capabilities = TagFormatCapabilities.combined(for: tracks.map(\.url))
     }
@@ -132,9 +132,11 @@ struct TagEditorView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Text("留空的文本字段不会被修改。")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(palette.text.opacity(0.4))
+                    if isBatch {
+                        Text("留空的文本字段不会被修改。")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(palette.mutedText(0.4))
+                    }
                 }
                 .padding(22)
             }
@@ -154,7 +156,7 @@ struct TagEditorView: View {
                 .foregroundColor(palette.text)
             Text(isBatch ? "\(tracks.count) 首" : tracks.first?.title ?? "")
                 .font(.system(size: 11.5))
-                .foregroundColor(palette.text.opacity(0.5))
+                .foregroundColor(palette.mutedText(0.5))
                 .lineLimit(1)
             Spacer()
         }
@@ -164,11 +166,21 @@ struct TagEditorView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
+            if let progress = model.fileWorkProgress {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.7)
+                    .frame(width: 14, height: 14)
+                Text(progress)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.text.opacity(0.6))
+            }
             Spacer()
             Button("取消") { dismiss() }
+                .disabled(model.fileWorkProgress != nil)
             Button("保存") { save() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!capabilities.canWrite || tracks.isEmpty)
+                .disabled(!capabilities.canWrite || tracks.isEmpty || model.fileWorkProgress != nil)
         }
         .padding(.horizontal, 22)
         .frame(height: 54)
@@ -229,7 +241,7 @@ struct TagEditorView: View {
                 .disabled(!capabilities.canWriteArtwork)
                 Text(coverHint)
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.text.opacity(0.5))
+                    .foregroundColor(palette.mutedText(0.5))
             }
             Spacer(minLength: 0)
         }
@@ -290,10 +302,13 @@ struct TagEditorView: View {
 
     private func save() {
         guard let edits = buildEdits() else { return }
-        if let error = model.applyTagEdit(edits, to: tracks) {
-            errorMessage = error
-        } else {
-            dismiss()
+        let tracks = tracks
+        Task {
+            if let error = await model.applyTagEdit(edits, to: tracks) {
+                errorMessage = error
+            } else {
+                dismiss()
+            }
         }
     }
 
@@ -466,7 +481,7 @@ private struct TagTextFieldRow: View {
             } else if let message {
                 Text(message)
                     .font(.system(size: 10.5))
-                    .foregroundColor(theme.text.opacity(0.45))
+                    .foregroundColor(theme.mutedText(0.45))
                     .padding(.leading, 80)
             }
         }

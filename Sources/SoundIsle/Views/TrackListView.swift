@@ -45,6 +45,11 @@ struct TrackListView: View {
                                         trackIDs: model.contextTrackIDs(for: track.id)
                                     )
                                 }
+                                Button("修复乱码标签…") {
+                                    model.promptRepairMojibake(
+                                        trackIDs: model.contextTrackIDs(for: track.id)
+                                    )
+                                }
                                 Button("整理文件…") {
                                     model.beginOrganize(
                                         trackIDs: model.contextTrackIDs(for: track.id)
@@ -90,7 +95,7 @@ struct TrackListView: View {
                 .lineLimit(1)
             Text(meta)
                 .font(.system(size: 11.5))
-                .foregroundColor(theme.text.opacity(0.5))
+                .foregroundColor(theme.mutedText(0.5))
                 .lineLimit(1)
 
             Spacer(minLength: 12)
@@ -103,7 +108,7 @@ struct TrackListView: View {
                         .frame(width: 12, height: 12)
                     Text("扫描中…")
                         .font(.system(size: 10.5))
-                        .foregroundColor(theme.text.opacity(0.5))
+                        .foregroundColor(theme.mutedText(0.5))
                 }
             }
 
@@ -149,7 +154,7 @@ struct TrackListView: View {
                 }
             }
             .font(.system(size: 10.5, weight: active ? .semibold : .regular))
-            .foregroundColor(active ? theme.accentLight : theme.text.opacity(0.45))
+            .foregroundColor(active ? theme.accentLight : theme.mutedText(0.45))
             .padding(.horizontal, 7)
             .frame(height: 22)
             .background(
@@ -210,7 +215,7 @@ struct TrackListView: View {
                     model.dismissStatus()
                 } label: {
                     Icons.close
-                        .foregroundColor(theme.text.opacity(0.5))
+                        .foregroundColor(theme.mutedText(0.5))
                         .frame(width: 18, height: 18)
                         .contentShape(Rectangle())
                 }
@@ -229,7 +234,7 @@ struct TrackListView: View {
                         model.chooseFFmpegPath()
                     }
                     Text("原生格式仍可正常播放")
-                        .foregroundColor(theme.text.opacity(0.45))
+                        .foregroundColor(theme.mutedText(0.45))
                     Spacer(minLength: 0)
                 }
                 .font(.system(size: 10.5))
@@ -258,13 +263,13 @@ struct TrackListView: View {
         return VStack(spacing: 12) {
             Spacer(minLength: 0)
             Icons.emptyLibrary
-                .foregroundColor(theme.text.opacity(0.28))
+                .foregroundColor(theme.mutedText(0.28))
             Text(emptyTitle(searching: searching, playlistEmpty: playlistEmpty))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(theme.text.opacity(0.85))
             Text(emptyHint(searching: searching, playlistEmpty: playlistEmpty))
                 .font(.system(size: 12))
-                .foregroundColor(theme.text.opacity(0.5))
+                .foregroundColor(theme.mutedText(0.5))
                 .multilineTextAlignment(.center)
 
             Button {
@@ -355,7 +360,7 @@ private struct TrackRow: View {
                 if !track.artist.isEmpty {
                     Text(track.artist)
                         .font(.system(size: 10.5))
-                        .foregroundColor(theme.text.opacity(0.5))
+                        .foregroundColor(theme.mutedText(0.5))
                         .lineLimit(1)
                 }
             }
@@ -365,7 +370,7 @@ private struct TrackRow: View {
             Text(TimeText.string(track.duration))
                 .font(.system(size: 10.5))
                 .monospacedDigit()
-                .foregroundColor(theme.text.opacity(0.45))
+                .foregroundColor(theme.mutedText(0.45))
                 .frame(width: 46, alignment: .trailing)
         }
         .padding(.horizontal, 8)
@@ -387,12 +392,12 @@ private struct TrackRow: View {
             Text("\(index + 1)")
                 .font(.system(size: 10.5))
                 .monospacedDigit()
-                .foregroundColor(theme.text.opacity(0.4))
+                .foregroundColor(theme.mutedText(0.4))
         }
     }
 
     private var titleColor: Color {
-        if track.isMissing { return theme.text.opacity(0.45) }
+        if track.isMissing { return theme.mutedText(0.45) }
         return isCurrent ? theme.accentLight : theme.text
     }
 

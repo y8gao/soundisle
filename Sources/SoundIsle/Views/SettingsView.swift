@@ -70,7 +70,7 @@ struct SettingsView: View {
         sectionCard(icon: Icons.settingsTags, title: "标签编辑") {
             Text("每次保存都会记录修改前后的标签，最多保留 50 条。")
                 .font(.system(size: 11))
-                .foregroundColor(palette.text.opacity(0.5))
+                .foregroundColor(palette.mutedText(0.5))
             HStack(spacing: 10) {
                 Button("撤销最近一次标签编辑") {
                     notice = model.undoLastTagEdit()
@@ -86,7 +86,7 @@ struct SettingsView: View {
 
                 Text("\(model.tagUndoCount) 条记录")
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.text.opacity(0.4))
+                    .foregroundColor(palette.mutedText(0.4))
             }
             if let notice {
                 Text(notice)
@@ -103,14 +103,25 @@ struct SettingsView: View {
         sectionCard(icon: Icons.settingsFolders, title: "音乐文件夹") {
             Text(model.folders.isEmpty ? "尚未导入文件夹。" : "已导入 \(model.folders.count) 个文件夹。")
                 .font(.system(size: 11))
-                .foregroundColor(palette.text.opacity(0.5))
+                .foregroundColor(palette.mutedText(0.5))
 
-            ForEach(model.folders.prefix(3), id: \.self) { folder in
-                Text(folder.path)
+            ForEach(model.folders, id: \.self) { folder in
+                HStack(spacing: 8) {
+                    Text(folder.path)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(palette.mutedText(0.42))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(folder.path)
+                    Spacer(minLength: 6)
+                    Button("移除") {
+                        if confirmRemoveFolder(folder) {
+                            folderNotice = model.removeFolder(folder)
+                        }
+                    }
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.text.opacity(0.42))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .help("从曲库移除这个文件夹，不会删除磁盘文件")
+                }
             }
 
             let missing = model.library.missingTracks
@@ -125,17 +136,29 @@ struct SettingsView: View {
                         folderNotice = model.removeMissingTracks()
                     }
                 }
-                ForEach(missing.prefix(3)) { track in
-                    Text("\(track.title) — \(track.url.lastPathComponent)")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(palette.text.opacity(0.45))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                if missing.count > 3 {
-                    Text("另有 \(missing.count - 3) 首…")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(palette.text.opacity(0.35))
+                ForEach(missing) { track in
+                    HStack(spacing: 8) {
+                        Text("\(track.title) — \(track.url.lastPathComponent)")
+                            .font(.system(size: 10.5))
+                            .foregroundColor(palette.mutedText(0.45))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(track.url.path)
+                        Spacer(minLength: 6)
+                        Button("重新定位…") {
+                            relocate(track)
+                        }
+                        .help("选择这个文件的新位置")
+                        if FileManager.default.fileExists(atPath: track.url.path) {
+                            Button("在 Finder 中显示") {
+                                NSWorkspace.shared.activateFileViewerSelecting([track.url])
+                            }
+                        }
+                        Button("移除") {
+                            folderNotice = model.removeMissingTrack(track)
+                        }
+                    }
+                    .font(.system(size: 10.5))
                 }
             }
 
@@ -148,14 +171,14 @@ struct SettingsView: View {
                 ForEach(unreadable.prefix(3), id: \.self) { url in
                     Text(url.lastPathComponent)
                         .font(.system(size: 10.5))
-                        .foregroundColor(palette.text.opacity(0.45))
+                        .foregroundColor(palette.mutedText(0.45))
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
                 if unreadable.count > 3 {
                     Text("另有 \(unreadable.count - 3) 个…")
                         .font(.system(size: 10.5))
-                        .foregroundColor(palette.text.opacity(0.35))
+                        .foregroundColor(palette.mutedText(0.35))
                 }
             }
 
@@ -170,7 +193,7 @@ struct SettingsView: View {
                 if model.isScanning {
                     Text("扫描中…")
                         .font(.system(size: 10.5))
-                        .foregroundColor(palette.text.opacity(0.4))
+                        .foregroundColor(palette.mutedText(0.4))
                 }
             }
             if let folderNotice {
@@ -188,7 +211,7 @@ struct SettingsView: View {
         sectionCard(icon: Icons.settingsCache, title: "缓存") {
             Text("不支持的格式会转换为 ALAC 后缓存在这里，清理不会删除原始文件。")
                 .font(.system(size: 11))
-                .foregroundColor(palette.text.opacity(0.5))
+                .foregroundColor(palette.mutedText(0.5))
             HStack(spacing: 10) {
                 Button("清理缓存") {
                     cacheNotice = model.clearTranscodeCache()
@@ -196,7 +219,7 @@ struct SettingsView: View {
                 .disabled(model.transcodeCacheBytes == 0)
                 Text(model.transcodeCacheSizeText)
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.text.opacity(0.4))
+                    .foregroundColor(palette.mutedText(0.4))
             }
             HStack(spacing: 10) {
                 Text("FFmpeg")
@@ -207,7 +230,7 @@ struct SettingsView: View {
                     .foregroundColor(
                         model.ffmpegPathText == "未找到"
                             ? palette.warning
-                            : palette.text.opacity(0.5)
+                            : palette.mutedText(0.5)
                     )
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -236,7 +259,7 @@ struct SettingsView: View {
         sectionCard(icon: Icons.settingsLyrics, title: "歌词") {
             Text("桌面歌词窗与在线歌词来源。")
                 .font(.system(size: 11))
-                .foregroundColor(palette.text.opacity(0.5))
+                .foregroundColor(palette.mutedText(0.5))
 
             Toggle(
                 "启用在线歌词匹配",
@@ -264,7 +287,7 @@ struct SettingsView: View {
                 Text("\(Int((settings.lyricsOpacity * 100).rounded()))%")
                     .font(.system(size: 10.5))
                     .monospacedDigit()
-                    .foregroundColor(palette.text.opacity(0.5))
+                    .foregroundColor(palette.mutedText(0.5))
                     .frame(width: 36, alignment: .trailing)
             }
 
@@ -307,7 +330,7 @@ struct SettingsView: View {
         sectionCard(icon: Icons.settingsAppearance, title: "外观") {
             Text("主题皮肤")
                 .font(.system(size: 11))
-                .foregroundColor(palette.text.opacity(0.55))
+                .foregroundColor(palette.mutedText(0.55))
 
             HStack(spacing: 8) {
                 ForEach(ThemePreset.allCases, id: \.self) { preset in
@@ -491,6 +514,31 @@ struct SettingsView: View {
         }
         .padding(14)
         .glassPanel(cornerRadius: 10)
+    }
+
+    private func relocate(_ track: Track) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "重新定位"
+        panel.message = "选择《\(track.title)》的新位置"
+        panel.nameFieldStringValue = track.url.lastPathComponent
+        let response = panel.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard response == .OK, let url = panel.url else { return }
+        folderNotice = model.relocateTrack(track, to: url)
+    }
+
+    private func confirmRemoveFolder(_ folder: URL) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "移除音乐文件夹「\(folder.lastPathComponent)」？"
+        alert.informativeText = "只会从曲库移除该文件夹和其中的歌曲，磁盘上的音频文件不会被删除。"
+        alert.addButton(withTitle: "移除")
+        alert.addButton(withTitle: "取消")
+        let response = alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        return response == .alertFirstButtonReturn
     }
 
     private func confirmClearUndo() -> Bool {

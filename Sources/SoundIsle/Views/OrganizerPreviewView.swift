@@ -8,7 +8,7 @@ import SwiftUI
 @MainActor
 struct OrganizerPreviewView: View {
     @Environment(\.colorScheme) private var colorScheme
-    let model: AppModel
+    @ObservedObject var model: AppModel
     let tracks: [Track]
 
     @Environment(\.dismiss) private var dismiss
@@ -41,7 +41,7 @@ struct OrganizerPreviewView: View {
     ]
 
     init(model: AppModel, tracks: [Track]) {
-        self.model = model
+        _model = ObservedObject(wrappedValue: model)
         self.tracks = tracks
         let root = tracks.first?.url.deletingLastPathComponent()
             ?? model.folders.first
@@ -51,7 +51,7 @@ struct OrganizerPreviewView: View {
     }
 
     private var items: [OrganizePlanItem] {
-        model.organizer.plan(tracks, template: template, root: destinationRoot, copy: copy)
+        model.organizer.plan(tracks, template: template, root: destinationRoot)
     }
 
     var body: some View {
@@ -91,7 +91,7 @@ struct OrganizerPreviewView: View {
                 .foregroundColor(palette.text)
             Text("\(tracks.count) 首 · 预览后才会执行")
                 .font(.system(size: 11.5))
-                .foregroundColor(palette.text.opacity(0.5))
+                .foregroundColor(palette.mutedText(0.5))
             Spacer()
         }
         .padding(.horizontal, 22)
@@ -100,14 +100,25 @@ struct OrganizerPreviewView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text(copy ? "原文件保留，只新增副本。" : "原文件夹中的文件会移到新路径。")
-                .font(.system(size: 10.5))
-                .foregroundColor(palette.text.opacity(0.45))
+            if let progress = model.fileWorkProgress {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.7)
+                    .frame(width: 14, height: 14)
+                Text(progress)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.text.opacity(0.6))
+            } else {
+                Text(copy ? "原文件保留，只新增副本。" : "原文件夹中的文件会移到新路径。")
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.mutedText(0.45))
+            }
             Spacer()
             Button("取消") { dismiss() }
+                .disabled(model.fileWorkProgress != nil)
             Button("开始整理") { confirm() }
                 .keyboardShortcut(.defaultAction)
-                .disabled(items.isEmpty)
+                .disabled(items.isEmpty || model.fileWorkProgress != nil)
         }
         .padding(.horizontal, 22)
         .frame(height: 56)
@@ -128,7 +139,7 @@ struct OrganizerPreviewView: View {
                 .frame(width: 240)
                 Text(template)
                     .font(.system(size: 10.5, design: .monospaced))
-                    .foregroundColor(palette.text.opacity(0.4))
+                    .foregroundColor(palette.mutedText(0.4))
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
@@ -162,7 +173,7 @@ struct OrganizerPreviewView: View {
                 .frame(width: 140)
                 Text("不会覆盖目标位置已有的同名文件。")
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.text.opacity(0.45))
+                    .foregroundColor(palette.mutedText(0.45))
                 Spacer(minLength: 0)
             }
         }
@@ -201,7 +212,7 @@ struct OrganizerPreviewView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.system(size: 10.5, weight: .semibold))
-            .foregroundColor(palette.text.opacity(0.5))
+            .foregroundColor(palette.mutedText(0.5))
             .padding(.horizontal, 12)
             .frame(height: 30)
             .background(palette.raisedFill)
@@ -209,7 +220,7 @@ struct OrganizerPreviewView: View {
             if items.isEmpty {
                 Text("没有需要整理的文件，可能已经在目标位置。")
                     .font(.system(size: 11.5))
-                    .foregroundColor(palette.text.opacity(0.45))
+                    .foregroundColor(palette.mutedText(0.45))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
             } else {
@@ -300,10 +311,18 @@ struct OrganizerPreviewView: View {
             }
         }
 
-        if let error = model.performOrganize(plan, copy: copy, destinationRoot: destinationRoot) {
-            errorMessage = error
-        } else {
-            dismiss()
+        let copy = copy
+        let destinationRoot = destinationRoot
+        Task {
+            if let error = await model.performOrganize(
+                plan,
+                copy: copy,
+                destinationRoot: destinationRoot
+            ) {
+                errorMessage = error
+            } else {
+                dismiss()
+            }
         }
     }
 
