@@ -13,6 +13,10 @@ struct TrackListView: View {
             header
             columnHeader
 
+            if let progress = model.fileWorkProgress {
+                progressBanner(progress)
+            }
+
             if let message = model.statusMessage {
                 statusBanner(message)
             }
@@ -199,6 +203,27 @@ struct TrackListView: View {
             }
         }
         return true
+    }
+
+    private func progressBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.65)
+                .frame(width: 12, height: 12)
+            Text(message)
+                .font(.system(size: 11.5))
+                .foregroundColor(theme.text.opacity(0.82))
+            Spacer(minLength: 6)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+        .background(theme.accent.opacity(0.10))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.hairline)
+                .frame(height: 1)
+        }
     }
 
     private func statusBanner(_ message: String) -> some View {

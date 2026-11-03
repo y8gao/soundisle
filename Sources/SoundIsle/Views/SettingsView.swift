@@ -75,14 +75,14 @@ struct SettingsView: View {
                 Button("撤销最近一次标签编辑") {
                     notice = model.undoLastTagEdit()
                 }
-                .disabled(!model.canUndoTagEdit)
+                .disabled(!model.canUndoTagEdit || model.fileWorkProgress != nil)
 
                 Button("清空编辑撤销记录") {
                     if confirmClearUndo() {
                         notice = model.clearTagUndoHistory()
                     }
                 }
-                .disabled(model.tagUndoCount == 0)
+                .disabled(model.tagUndoCount == 0 || model.fileWorkProgress != nil)
 
                 Text("\(model.tagUndoCount) 条记录")
                     .font(.system(size: 10.5))

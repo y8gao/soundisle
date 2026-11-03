@@ -565,4 +565,30 @@ final class LibraryStoreTests: XCTestCase {
         // The healed row is written back, so the next launch starts clean.
         XCTAssertEqual(persistedIndex().tracks.first?.title, "天空之城")
     }
+
+    @MainActor
+    func testRelocatedFileOutsideFoldersSurvivesRescan() async throws {
+        let oldFolder = try makeSubfolder("旧")
+        let newFolder = try makeSubfolder("新")
+        let oldURL = try makeFile("曲.mp3", in: oldFolder)
+        let newURL = newFolder.appendingPathComponent("曲.mp3")
+        let reader = StubReader()
+        reader.setMetadata(["曲.mp3": AudioMetadata(title: "曲", duration: 10)])
+        let store = LibraryStore(directory: dataDir)
+        await store.addFolder(oldFolder, reader: reader)
+        let id = try track(named: "曲", in: store).id
+
+        try fm.moveItem(at: oldURL, to: newURL)
+        store.updateTrackURLs([oldURL: newURL])
+        store.ensureFoldersCovering([newFolder])
+        await store.rescan(reader: reader)
+
+        let relocated = try XCTUnwrap(store.index.tracks.first { $0.id == id })
+        XCTAssertEqual(relocated.url.standardizedFileURL, newURL.standardizedFileURL)
+        XCTAssertFalse(relocated.isMissing)
+        XCTAssertEqual(store.index.tracks.count, 1)
+        XCTAssertTrue(store.index.folders.contains {
+            $0.standardizedFileURL == newFolder.standardizedFileURL
+        })
+    }
 }

@@ -28,6 +28,9 @@ struct OrganizerPreviewView: View {
     @State private var destinationRoot: URL
     @State private var copy = false
     @State private var errorMessage: String?
+    /// Frozen while `performOrganize` runs so the visible rows cannot renumber
+    /// to `(2)` after the earlier files have already moved.
+    @State private var frozenItems: [OrganizePlanItem]?
 
     private struct Preset: Identifiable, Hashable {
         let name: String
@@ -51,7 +54,8 @@ struct OrganizerPreviewView: View {
     }
 
     private var items: [OrganizePlanItem] {
-        model.organizer.plan(tracks, template: template, root: destinationRoot)
+        if let frozenItems { return frozenItems }
+        return model.organizer.plan(tracks, template: template, root: destinationRoot)
     }
 
     var body: some View {
@@ -137,6 +141,7 @@ struct OrganizerPreviewView: View {
                 }
                 .labelsHidden()
                 .frame(width: 240)
+                .disabled(model.fileWorkProgress != nil)
                 Text(template)
                     .font(.system(size: 10.5, design: .monospaced))
                     .foregroundColor(palette.mutedText(0.4))
@@ -160,6 +165,7 @@ struct OrganizerPreviewView: View {
                     )
                     .help(destinationRoot.path)
                 Button("选择…") { chooseRoot() }
+                    .disabled(model.fileWorkProgress != nil)
             }
 
             HStack(spacing: 10) {
@@ -171,6 +177,7 @@ struct OrganizerPreviewView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 140)
+                .disabled(model.fileWorkProgress != nil)
                 Text("不会覆盖目标位置已有的同名文件。")
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.mutedText(0.45))
@@ -313,12 +320,14 @@ struct OrganizerPreviewView: View {
 
         let copy = copy
         let destinationRoot = destinationRoot
+        frozenItems = plan
         Task {
             if let error = await model.performOrganize(
                 plan,
                 copy: copy,
                 destinationRoot: destinationRoot
             ) {
+                frozenItems = nil
                 errorMessage = error
             } else {
                 dismiss()

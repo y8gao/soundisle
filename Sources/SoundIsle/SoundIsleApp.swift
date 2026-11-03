@@ -64,7 +64,7 @@ private struct FileOrganizerCommands: Commands {
             Button("撤销上次整理") {
                 model.undoLastOrganize()
             }
-            .disabled(!model.canUndoOrganize)
+            .disabled(!model.canUndoOrganize || model.fileWorkProgress != nil)
         }
     }
 }

@@ -682,6 +682,11 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func undoLastOrganize() -> String {
+        guard fileWorkProgress == nil else {
+            let message = "正在整理，请稍后再撤销。"
+            statusMessage = message
+            return message
+        }
         let wasCopy = organizer.undo.entries.last?.copy ?? false
         do {
             guard let items = try organizer.undoLast() else {
@@ -1647,6 +1652,9 @@ final class AppModel: ObservableObject {
     @discardableResult
     func relocateTrack(_ track: Track, to url: URL) -> String {
         library.updateTrackURLs([track.url: url])
+        // A relocated file often lives outside the imported folders. Cover it
+        // now, or the rescan at the next launch would mark it missing again.
+        library.ensureFoldersCovering([url.deletingLastPathComponent()])
         refreshFromLibrary()
         objectWillChange.send()
         surfacePersistenceError()
