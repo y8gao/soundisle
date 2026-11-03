@@ -16,22 +16,47 @@ public struct LRCLIBClient: LyricsFetching {
         case badStatus(Int)
     }
 
-    private static let endpoint = URL(string: "https://lrclib.net/api/get")!
+    /// `https://lrclib.net/api/get`; a custom endpoint keeps the same
+    /// `track_name` / `artist_name` / `duration` query contract.
+    public static let defaultEndpoint = URL(string: "https://lrclib.net/api/get")!
     private static let userAgent = "SoundIsle/0.1"
 
+    private let endpoint: URL
     private let session: URLSession
 
-    public init(session: URLSession = .shared) {
+    public init(endpoint: URL? = nil, session: URLSession = .shared) {
+        self.endpoint = endpoint ?? Self.defaultEndpoint
         self.session = session
     }
 
+    /// Validates a user-entered endpoint. Empty, relative or non-http(s)
+    /// values are rejected so a typo never replaces the LRCLIB fallback.
+    public static func endpointURL(from raw: String?) -> URL? {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host,
+              !host.isEmpty else { return nil }
+        return url
+    }
+
+    /// The endpoint a client should use: the configured one when valid,
+    /// otherwise LRCLIB's default.
+    public static func resolvedEndpoint(_ raw: String?) -> URL {
+        endpointURL(from: raw) ?? defaultEndpoint
+    }
+
     public func fetch(title: String, artist: String, duration: TimeInterval) async throws -> Lyrics? {
-        var components = URLComponents(url: Self.endpoint, resolvingAgainstBaseURL: false)
-        components?.queryItems = [
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+        var queryItems = components?.queryItems ?? []
+        queryItems.append(contentsOf: [
             URLQueryItem(name: "track_name", value: title),
             URLQueryItem(name: "artist_name", value: artist),
             URLQueryItem(name: "duration", value: String(Int(duration.rounded()))),
-        ]
+        ])
+        components?.queryItems = queryItems
         guard let url = components?.url else { throw ClientError.invalidURL }
 
         var request = URLRequest(url: url)
@@ -46,21 +71,28 @@ public struct LRCLIBClient: LyricsFetching {
             throw ClientError.badStatus(http.statusCode)
         }
 
-        let payload = try JSONDecoder().decode(Payload.self, from: data)
-        if let synced = payload.syncedLyrics?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !synced.isEmpty {
-            let parsed = LRCParser.parse(synced)
-            return parsed.lines.isEmpty ? nil : parsed
+        if let payload = try? JSONDecoder().decode(Payload.self, from: data) {
+            if let synced = payload.syncedLyrics?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !synced.isEmpty {
+                let parsed = LRCParser.parse(synced)
+                return parsed.lines.isEmpty ? nil : parsed
+            }
+            if let plain = payload.plainLyrics?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !plain.isEmpty {
+                // LRCLIB's plain text is shown line-by-line without timing.
+                let parsed = LRCParser.parse(plain)
+                return parsed.lines.isEmpty
+                    ? nil
+                    : Lyrics(lines: parsed.lines.map { LyricLine(time: 0, text: $0.text) }, isSynced: false)
+            }
+            return nil
         }
-        if let plain = payload.plainLyrics?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !plain.isEmpty {
-            // LRCLIB's plain text is shown line-by-line without timing.
-            let parsed = LRCParser.parse(plain)
-            return parsed.lines.isEmpty
-                ? nil
-                : Lyrics(lines: parsed.lines.map { LyricLine(time: 0, text: $0.text) }, isSynced: false)
-        }
-        return nil
+
+        // Compatible providers may return the LRC/plain text file directly.
+        // Timestamps make it synced; otherwise the parser yields plain lines.
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        let parsed = LRCParser.parse(text)
+        return parsed.lines.isEmpty ? nil : parsed
     }
 
     private struct Payload: Decodable {

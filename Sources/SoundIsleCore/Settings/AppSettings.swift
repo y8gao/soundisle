@@ -14,6 +14,8 @@ public struct AppSettings: Codable, Equatable {
     public var keepRunningOnClose: Bool = true
     public var miniAlwaysOnTop: Bool = true
     public var onlineLyricsEnabled: Bool = true
+    /// Custom lyrics provider endpoint; `nil` uses LRCLIB's default.
+    public var lyricsEndpoint: String?
     public var playbackMode: String = "repeatAll"
     public var lastQueue: [UUID] = []
     public var lastTrackID: UUID?
@@ -39,6 +41,7 @@ public struct AppSettings: Codable, Equatable {
         keepRunningOnClose = try container.decodeIfPresent(Bool.self, forKey: .keepRunningOnClose) ?? true
         miniAlwaysOnTop = try container.decodeIfPresent(Bool.self, forKey: .miniAlwaysOnTop) ?? true
         onlineLyricsEnabled = try container.decodeIfPresent(Bool.self, forKey: .onlineLyricsEnabled) ?? true
+        lyricsEndpoint = try container.decodeIfPresent(String.self, forKey: .lyricsEndpoint)
         // Sequential playback was removed from the UI; a settings file written
         // by an older version migrates to repeat-all on load.
         let storedMode = try container.decodeIfPresent(String.self, forKey: .playbackMode) ?? "repeatAll"

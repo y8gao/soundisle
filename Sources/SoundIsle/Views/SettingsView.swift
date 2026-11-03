@@ -14,6 +14,12 @@ struct SettingsView: View {
     @State private var notice: String?
     @State private var folderNotice: String?
     @State private var cacheNotice: String?
+    /// Identifies the sheet window so clicks inside it (and in nested
+    /// popovers) can be distinguished from a click on the window behind.
+    @State private var sheetWindow: NSWindow?
+    @State private var outsideClickMonitor: Any?
+    @State private var lyricsEndpointText = ""
+    @State private var lyricsEndpointNotice: String?
 
     private var settings: AppSettings { model.library.settings }
 
@@ -60,9 +66,17 @@ struct SettingsView: View {
         // minimized window can still present it; the content scrolls.
         .frame(width: 580, height: 560)
         .background(AppBackground())
-        .background(SheetWindowConfigurator())
+        .background(SheetWindowConfigurator { sheetWindow = $0 })
         .soundIsleTheme(palette)
-        .onAppear { model.refreshTranscodeCacheSize() }
+        .onAppear {
+            model.refreshTranscodeCacheSize()
+            lyricsEndpointText = settings.lyricsEndpoint ?? ""
+            installOutsideClickMonitor()
+        }
+        .onDisappear {
+            saveLyricsEndpoint()
+            removeOutsideClickMonitor()
+        }
     }
 
     // MARK: - Tag editing
@@ -239,6 +253,41 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .foregroundColor(palette.text.opacity(0.82))
+
+            HStack(spacing: 10) {
+                Text("歌词源地址")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                TextField(
+                    "https://lrclib.net/api/get",
+                    text: $lyricsEndpointText,
+                    onEditingChanged: { editing in
+                        if !editing { saveLyricsEndpoint() }
+                    }
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 11))
+                .onSubmit { saveLyricsEndpoint() }
+                Button("恢复默认") {
+                    lyricsEndpointText = ""
+                    lyricsEndpointNotice = nil
+                    _ = model.setLyricsEndpoint(nil)
+                }
+                .disabled(
+                    settings.lyricsEndpoint == nil
+                        && lyricsEndpointText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
+            }
+            Text("兼容 LRCLIB 接口；也可填直接返回 LRC 文本的地址")
+                .font(.system(size: 10.5))
+                .foregroundColor(palette.mutedText(0.45))
+            if let lyricsEndpointNotice {
+                Text(lyricsEndpointNotice)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             HStack(spacing: 10) {
                 Text("悬停背景不透明度")
@@ -484,6 +533,43 @@ struct SettingsView: View {
         .glassPanel(cornerRadius: 10)
     }
 
+    /// A click on the main window behind the sheet dismisses it. Clicks inside
+    /// the sheet, in a nested popover (ColorPicker), or on chrome with no
+    /// window are left alone.
+    private func installOutsideClickMonitor() {
+        guard outsideClickMonitor == nil else { return }
+        outsideClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown]) { event in
+            guard let window = event.window else { return event }
+            if let sheetWindow, window === sheetWindow { return event }
+            // Popovers and menus are their own panel windows; a click there is
+            // still "inside" the settings interaction.
+            if window is NSPanel || window.isSheet { return event }
+            if window.className.contains("Popover") || window.className.contains("Menu") {
+                return event
+            }
+            guard window.canBecomeMain else { return event }
+            dismiss()
+            return event
+        }
+    }
+
+    private func removeOutsideClickMonitor() {
+        if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
+        outsideClickMonitor = nil
+    }
+
+    /// Saves on submit/focus loss. An invalid non-empty value keeps the text
+    /// in place so it can be corrected, shows a notice, and is not persisted.
+    private func saveLyricsEndpoint() {
+        let trimmed = lyricsEndpointText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let message = model.setLyricsEndpoint(trimmed.isEmpty ? nil : trimmed) {
+            lyricsEndpointNotice = message
+        } else {
+            lyricsEndpointNotice = nil
+            lyricsEndpointText = settings.lyricsEndpoint ?? ""
+        }
+    }
+
     private func relocate(_ track: Track) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
@@ -515,12 +601,15 @@ struct SettingsView: View {
 /// A sheet is its own window; clearing it lets the `AppBackground` material
 /// blur the main window instead of painting an opaque sheet.
 private struct SheetWindowConfigurator: NSViewRepresentable {
+    var onWindow: ((NSWindow) -> Void)?
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             window.isOpaque = false
             window.backgroundColor = .clear
+            onWindow?(window)
         }
         return view
     }

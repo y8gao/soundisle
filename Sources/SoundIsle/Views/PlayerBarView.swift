@@ -291,7 +291,7 @@ private struct PlayerProgressLine: View {
                     .frame(width: knob, height: knob)
                     .shadow(color: theme.accent.opacity(0.85), radius: knob * 0.7)
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
-                    .position(x: knobX, y: lineHeight / 2 + 3)
+                    .position(x: knobX, y: lineHeight / 2)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .animation(.easeOut(duration: 0.16), value: active)

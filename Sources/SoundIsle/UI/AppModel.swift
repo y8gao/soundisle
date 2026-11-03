@@ -155,7 +155,12 @@ final class AppModel: ObservableObject {
             directory: directory.appendingPathComponent("lyrics", isDirectory: true)
         )
         self.lyricsCache = lyricsCache
-        self.lyricsService = LyricsService(cache: lyricsCache, client: LRCLIBClient())
+        self.lyricsService = LyricsService(
+            cache: lyricsCache,
+            client: LRCLIBClient(
+                endpoint: LRCLIBClient.endpointURL(from: library.settings.lyricsEndpoint)
+            )
+        )
 
         restorePlaybackState()
         tagUndoCount = tagUndoStore.entries.count
@@ -1635,6 +1640,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Returns a user-facing error when `raw` is not a usable http(s) URL;
+    /// `nil` means the endpoint was saved (or cleared to the default).
+    @discardableResult
+    func setLyricsEndpoint(_ raw: String?) -> String? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        if let normalized, LRCLIBClient.endpointURL(from: normalized) == nil {
+            return "歌词源地址无效，请输入 http 或 https 链接。"
+        }
+        guard library.settings.lyricsEndpoint != normalized else { return nil }
+        library.settings.lyricsEndpoint = normalized
+        lyricsService.client = LRCLIBClient(
+            endpoint: LRCLIBClient.endpointURL(from: normalized)
+        )
+        saveSettingsAndNotify()
+        return nil
+    }
+
     /// The spectrum tap runs only while someone draws it: the mini window is
     /// visible, or the main player bar spectrum is enabled.
     func refreshSpectrumConsumers() {
@@ -1915,6 +1938,23 @@ final class AppModel: ObservableObject {
               isMainWindowKey,
               !isSearchFocused,
               !isEditingText else { return false }
+
+        // ⌘←/⌘→ skip tracks. Checked before the plain-arrow modifier guard
+        // below, which deliberately rejects every Command chord.
+        let commandChord = event.modifierFlags
+            .intersection([.command, .option, .control, .shift])
+        if commandChord == .command, !event.isARepeat {
+            switch event.keyCode {
+            case 123: // ⌘←
+                previous()
+                return true
+            case 124: // ⌘→
+                next()
+                return true
+            default:
+                break
+            }
+        }
         guard event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return false }
 
         switch event.keyCode {

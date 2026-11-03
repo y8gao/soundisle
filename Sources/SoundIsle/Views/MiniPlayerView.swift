@@ -12,6 +12,10 @@ struct MiniPlayerView: View {
     @Environment(\.colorScheme) private var colorScheme
     let onExpand: () -> Void
 
+    /// Hovering makes the capsule more opaque so the title, lyric and controls
+    /// stay readable; the resting state is deliberately see-through.
+    @State private var isHovering = false
+
     init(model: AppModel, onExpand: @escaping () -> Void) {
         self.model = model
         self.engine = model.engine
@@ -32,11 +36,18 @@ struct MiniPlayerView: View {
         RoundedRectangle(cornerRadius: 32, style: .continuous)
     }
 
+    private var tintOpacity: Double {
+        if palette.isDark {
+            return isHovering ? 0.62 : 0.30
+        }
+        return isHovering ? 0.78 : 0.48
+    }
+
     var body: some View {
         content
             .frame(width: MiniPlayerWindowController.size.width, height: MiniPlayerWindowController.size.height)
             .background(WindowDragArea())
-            .background(palette.panelTint.opacity(palette.isDark ? 0.52 : 0.74), in: capsule)
+            .background(palette.panelTint.opacity(tintOpacity), in: capsule)
             .background(.ultraThinMaterial, in: capsule)
             // Extra behind-window blur plus a faint accent wash for depth.
             .background {
@@ -78,6 +89,8 @@ struct MiniPlayerView: View {
             .overlay(alignment: .bottom) { progressLine }
             .clipShape(capsule)
             .soundIsleTheme(palette)
+            .animation(.easeOut(duration: 0.16), value: isHovering)
+            .onHover { isHovering = $0 }
     }
 
     private var content: some View {
@@ -151,6 +164,11 @@ struct MiniPlayerView: View {
     private var subtitle: String {
         guard let track = model.currentTrack else { return "选择一首歌曲" }
         if track.isMissing { return "文件缺失" }
+        if let lyric = model.currentLyricText?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !lyric.isEmpty {
+            return lyric
+        }
         return track.artist.isEmpty ? "未知歌手" : track.artist
     }
 

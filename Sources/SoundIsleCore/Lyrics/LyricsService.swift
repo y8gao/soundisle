@@ -89,7 +89,9 @@ public struct LyricsDisplayState: Equatable {
 /// failures are swallowed here; callers stay silent and offer a retry.
 public final class LyricsService {
     private let cache: LyricsCache
-    private let client: LyricsFetching
+    /// Replaceable so a settings change (custom lyrics endpoint) takes effect
+    /// without rebuilding the service or losing its cache.
+    public var client: LyricsFetching
 
     public var isOnlineEnabled = true
 

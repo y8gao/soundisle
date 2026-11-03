@@ -91,8 +91,7 @@ struct LyricsOverlayView: View {
                     lyricText(
                         model.currentLyricText ?? "",
                         size: fontSize,
-                        weight: .semibold,
-                        color: .white
+                        weight: .semibold
                     )
                     .lineLimit(2)
 
@@ -103,7 +102,7 @@ struct LyricsOverlayView: View {
                             next,
                             size: fontSize * 0.55,
                             weight: .regular,
-                            color: Color.white.opacity(0.78)
+                            emphasis: 0.78
                         )
                         .lineLimit(1)
                     }
@@ -120,7 +119,7 @@ struct LyricsOverlayView: View {
                                 line.text,
                                 size: fontSize * 0.7,
                                 weight: .regular,
-                                color: Color.white.opacity(0.92)
+                                emphasis: 0.92
                             )
                         }
                     }
@@ -178,14 +177,23 @@ struct LyricsOverlayView: View {
         .disabled(model.currentTrack == nil || model.isResolvingLyrics)
     }
 
-    /// macOS 12 has no native text stroke, so the overlay always draws a dark
-    /// halo behind a white fill. That keeps desktop lyrics legible on white
-    /// wallpapers even with 「歌词描边」 off; the setting thickens the halo.
+    /// Text follows the **system** appearance rather than the app's theme
+    /// preset: near-black on a light system with a white halo, white on a dark
+    /// system with a dark halo. macOS 12 has no native text stroke, so the
+    /// halo is drawn as offset copies plus a blur; 「歌词描边」 thickens it.
+    private var lyricFill: Color {
+        colorScheme == .dark ? .white : Color(white: 0.06)
+    }
+
+    private var lyricHalo: Color {
+        colorScheme == .dark ? .black : .white
+    }
+
     private func lyricText(
         _ text: String,
         size: CGFloat,
         weight: Font.Weight,
-        color: Color
+        emphasis: Double = 1
     ) -> some View {
         let base = Text(text).font(.system(size: size, weight: weight))
         let haloOpacity = outline ? 0.98 : 0.82
@@ -193,19 +201,23 @@ struct LyricsOverlayView: View {
         let ringScale: CGFloat = outline ? 1.0 : 0.85
         return ZStack {
             base
-                .foregroundColor(.black.opacity(haloOpacity))
+                .foregroundColor(lyricHalo.opacity(haloOpacity))
                 .blur(radius: haloBlur)
             ForEach(Array(Self.outlineOffsets.enumerated()), id: \.offset) { _, offset in
                 base
-                    .foregroundColor(.black.opacity(haloOpacity))
+                    .foregroundColor(lyricHalo.opacity(haloOpacity))
                     .offset(
                         x: offset.width * ringScale,
                         y: offset.height * ringScale
                     )
             }
-            base.foregroundColor(color)
+            base.foregroundColor(lyricFill.opacity(emphasis))
         }
-        .shadow(color: .black.opacity(outline ? 0.55 : 0.4), radius: outline ? 3 : 2, y: 1)
+        .shadow(
+            color: lyricHalo.opacity(outline ? 0.55 : 0.4),
+            radius: outline ? 3 : 2,
+            y: 1
+        )
     }
 
     private static let outlineOffsets: [CGSize] = {
