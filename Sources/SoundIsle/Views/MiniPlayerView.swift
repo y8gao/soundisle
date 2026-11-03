@@ -57,7 +57,7 @@ struct MiniPlayerView: View {
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 10.5))
-                    .foregroundColor(palette.text.opacity(0.55))
+                    .foregroundColor(palette.mutedText(0.55))
                     .lineLimit(1)
             }
             .frame(width: 126, alignment: .leading)
@@ -105,23 +105,11 @@ struct MiniPlayerView: View {
     // MARK: - Pieces
 
     private var cover: some View {
-        RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(palette.coverGradient)
-            .frame(width: 44, height: 44)
-            .overlay {
-                Icons.coverNote
-                    .foregroundColor(Color.white.opacity(0.55))
-            }
-            .overlay {
-                RadialGradient(
-                    colors: [Color.white.opacity(0.35), .clear],
-                    center: UnitPoint(x: 0.3, y: 0.25),
-                    startRadius: 0,
-                    endRadius: 32
-                )
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+        TrackCoverView(
+            url: model.currentTrack.flatMap { model.library.artworkURL(for: $0) },
+            size: 44,
+            cornerRadius: 11
+        )
     }
 
     private var subtitle: String {
@@ -166,7 +154,7 @@ private struct MiniPositionView: View {
         Text(TimeText.string(engine.duration > 0 ? position : model.displayPosition))
             .font(.system(size: 10))
             .monospacedDigit()
-            .foregroundColor(theme.text.opacity(0.5))
+            .foregroundColor(theme.mutedText(0.5))
             .onReceive(engine.$position) { position = $0 }
             .onAppear { position = engine.position }
     }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SoundIsleCore
 import SwiftUI
@@ -67,23 +68,11 @@ struct PlayerBarView: View {
 
     private var trackInfo: some View {
         HStack(spacing: 13) {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(theme.coverGradient)
-                .frame(width: 42, height: 42)
-                .overlay {
-                    Icons.coverNote
-                        .foregroundColor(Color.white.opacity(0.55))
-                }
-                .overlay {
-                    RadialGradient(
-                        colors: [Color.white.opacity(0.35), .clear],
-                        center: UnitPoint(x: 0.3, y: 0.25),
-                        startRadius: 0,
-                        endRadius: 30
-                    )
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+            TrackCoverView(
+                url: model.currentTrack.flatMap { model.library.artworkURL(for: $0) },
+                size: 42,
+                cornerRadius: 8
+            )
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.currentTrack?.title ?? "未在播放")
@@ -92,7 +81,7 @@ struct PlayerBarView: View {
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.system(size: 10.5))
-                    .foregroundColor(theme.text.opacity(0.55))
+                    .foregroundColor(theme.mutedText(0.55))
                     .lineLimit(1)
             }
         }
@@ -189,6 +178,52 @@ struct PlayerBarView: View {
     }
 }
 
+// MARK: - Cover
+
+/// Cached tag artwork with the original gradient as the placeholder/fallback.
+/// `AsyncImage` loads and decodes off the main thread, so a large cover never
+/// stalls the player bar or the mini player.
+struct TrackCoverView: View {
+    @Environment(\.theme) private var theme
+    let url: URL?
+    let size: CGFloat
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(theme.coverGradient)
+            Icons.coverNote
+                .foregroundColor(Color.white.opacity(0.55))
+            if let url {
+                AsyncImage(
+                    url: url,
+                    transaction: Transaction(animation: .easeOut(duration: 0.15))
+                ) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    }
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+            RadialGradient(
+                colors: [Color.white.opacity(0.22), .clear],
+                center: UnitPoint(x: 0.3, y: 0.25),
+                startRadius: 0,
+                endRadius: size * 0.72
+            )
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .allowsHitTesting(false)
+        }
+        .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+    }
+}
+
 // MARK: - Progress
 
 private struct PlayerProgressView: View {
@@ -272,7 +307,7 @@ private struct PlaybackModeButton: View {
         Button(action: action) {
             icon
                 .foregroundColor(
-                    isSelected ? theme.accentLight : theme.text.opacity(isHovering ? 0.9 : 0.45)
+                    isSelected ? theme.accentLight : theme.mutedText(isHovering ? 0.9 : 0.45)
                 )
                 .frame(width: 24, height: 24)
                 .background(

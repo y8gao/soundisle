@@ -88,7 +88,7 @@ struct MainWindowView: View {
 
                 HStack(spacing: 6) {
                     Icons.search
-                        .foregroundColor(palette.text.opacity(0.45))
+                        .foregroundColor(palette.mutedText(0.45))
                     TextField("搜索歌曲、歌手、专辑", text: $model.searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
@@ -140,7 +140,7 @@ struct MainWindowView: View {
                         .foregroundColor(palette.text)
                     Text("文件夹会递归扫描，单个文件会导入所在文件夹")
                         .font(.system(size: 11))
-                        .foregroundColor(palette.text.opacity(0.55))
+                        .foregroundColor(palette.mutedText(0.55))
                 }
                 .padding(.horizontal, 30)
                 .padding(.vertical, 24)

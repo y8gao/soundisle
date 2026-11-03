@@ -102,7 +102,7 @@ struct SidebarView: View {
                 model.promptCreatePlaylist()
             } label: {
                 Icons.plus
-                    .foregroundColor(theme.text.opacity(0.55))
+                    .foregroundColor(theme.mutedText(0.55))
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
@@ -117,7 +117,7 @@ struct SidebarView: View {
         libraryRow(
             title: playlist.name,
             icon: Icons.playlist,
-            count: playlist.trackIDs.count,
+            count: model.resolvableTrackCount(in: playlist),
             isSelected: selection == .playlist(playlist.id),
             isDropTarget: dropTargetID == playlist.id
         ) {
@@ -163,10 +163,10 @@ struct SidebarView: View {
     private func emptyRow(_ text: String) -> some View {
         HStack(spacing: 8) {
             Icons.playlist
-                .foregroundColor(theme.text.opacity(0.3))
+                .foregroundColor(theme.mutedText(0.3))
             Text(text)
                 .font(.system(size: 11.5))
-                .foregroundColor(theme.text.opacity(0.35))
+                .foregroundColor(theme.mutedText(0.35))
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
@@ -176,7 +176,7 @@ struct SidebarView: View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
             .tracking(1.1)
-            .foregroundColor(theme.text.opacity(0.42))
+            .foregroundColor(theme.mutedText(0.42))
             .padding(.horizontal, 9)
             .padding(.top, 4)
             .padding(.bottom, 5)
@@ -201,7 +201,7 @@ struct SidebarView: View {
                 Text("\(count)")
                     .font(.system(size: 10.5))
                     .monospacedDigit()
-                    .foregroundColor(theme.text.opacity(isSelected ? 0.7 : 0.4))
+                    .foregroundColor(theme.mutedText(isSelected ? 0.7 : 0.4))
             }
             .font(.system(size: 12.5, weight: isSelected ? .semibold : .regular))
             .foregroundColor(isSelected ? theme.accentLight : theme.text.opacity(0.64))

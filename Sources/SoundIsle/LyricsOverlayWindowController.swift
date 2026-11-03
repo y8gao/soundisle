@@ -16,8 +16,6 @@ final class LyricsOverlayWindowController {
     private let panel: NSPanel
     private(set) var isLocked = false
 
-    var isVisible: Bool { panel.isVisible }
-
     init(model: AppModel) {
         self.model = model
 
@@ -98,10 +96,6 @@ final class LyricsOverlayWindowController {
     func setLocked(_ locked: Bool) {
         isLocked = locked
         panel.ignoresMouseEvents = locked
-    }
-
-    func toggleLock() {
-        model.toggleLyricsLock()
     }
 
     // MARK: - Frame

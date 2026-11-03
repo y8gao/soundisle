@@ -90,7 +90,7 @@ struct LyricsOverlayView: View {
                             next,
                             size: fontSize * 0.55,
                             weight: .regular,
-                            color: palette.text.opacity(0.52)
+                            color: palette.mutedText(0.52)
                         )
                         .lineLimit(1)
                     }
@@ -114,7 +114,10 @@ struct LyricsOverlayView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                 }
-                .allowsHitTesting(false)
+                // Plain (unsynced) lyrics are long: let the user scroll this
+                // text while still dragging the rest of the window. Synced
+                // lyrics and the locked overlay stay click-through.
+                .allowsHitTesting(!model.isLyricsLocked)
             }
         } else {
             VStack(spacing: 7) {
