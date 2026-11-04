@@ -341,9 +341,9 @@
 "这个 WAV 文件没有 ID3v2 标签块，无法写入标签。" = "This WAV file has no ID3v2 chunk, so tags cannot be written.";
 "WMA/ASF 格式不支持写入专辑歌手或封面。" = "WMA/ASF does not support album artist or artwork.";
 "不支持的音频格式，无法写入标签。" = "Unsupported audio format; tags cannot be written.";
-"深空蓝" = "Deep Space Blue";
-"晨光橙" = "Morning Orange";
-"墨黑琥珀" = "Ink Amber";
+"深空蓝" = "Deep Blue";
+"晨光橙" = "Morning";
+"墨黑琥珀" = "Amber";
 "青瓷" = "Celadon";
 "莓紫" = "Berry";
 "海盐" = "Sea Salt";
