@@ -131,7 +131,7 @@ struct MainWindowView: View {
             }
         }
         // Leave room for the traffic lights of the hidden title bar.
-        .padding(.leading, 78)
+        .padding(.leading, 70)
         .padding(.trailing, 16)
         .frame(height: 46)
         .background(palette.raisedFill.opacity(0.24))
