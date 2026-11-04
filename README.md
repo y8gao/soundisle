@@ -1,5 +1,7 @@
 # 声屿 SoundIsle
 
+[English README](README.en.md)
+
 一个面向本地音乐库的 macOS 播放器：递归扫描文件夹、播放列表与搜索、菜单栏/媒体键/迷你窗、桌面歌词、标签编辑与乱码修复、按模板整理文件、非原生格式后台转码，以及六套主题与频谱。
 
 > 截图占位：`docs/screenshots/main.png`（尚未提供）。
