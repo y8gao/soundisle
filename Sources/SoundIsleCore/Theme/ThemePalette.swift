@@ -66,7 +66,7 @@ public enum ThemeCatalog {
         case .deepBlue: presetAccent = isDark ? "#7AA2FF" : "#3E6FE0"
         case .morning: presetAccent = "#C2703D"
         case .inkAmber: presetAccent = "#F5B942"
-        case .celadon: presetAccent = "#4FB89A"
+        case .celadon: presetAccent = isDark ? "#4FB89A" : "#2F7D6A"
         case .berry: presetAccent = "#B48CF2"
         case .seaSalt: presetAccent = "#3E8FB0"
         }

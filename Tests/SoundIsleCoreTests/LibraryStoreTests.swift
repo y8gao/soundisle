@@ -172,7 +172,7 @@ final class LibraryStoreTests: XCTestCase {
 
     func testDefaultsMatchPlan() {
         let settings = AppSettings()
-        XCTAssertEqual(settings.themePreset, "deepBlue")
+        XCTAssertEqual(settings.themePreset, "celadon")
         XCTAssertEqual(settings.themeMode, "system")
         XCTAssertNil(settings.customAccentHex)
         XCTAssertEqual(settings.lyricsOpacity, 0.26)

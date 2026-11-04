@@ -135,8 +135,8 @@ struct ThemePalette {
             return Skin(
                 darkTop: "#0C1716", darkMiddle: "#142724", darkBottom: "#0F1F1C",
                 darkPanel: "#12201E", darkPlayer: "#091311", darkGlow: "#7FC7B0",
-                lightTop: "#EFF7F4", lightMiddle: "#DFF0EA", lightBottom: "#FAFDFC",
-                lightPanel: "#FBFEFD", lightPlayer: "#EDF7F3", lightGlow: "#79B79F"
+                lightTop: "#E7F2ED", lightMiddle: "#D9EAE3", lightBottom: "#F4FAF7",
+                lightPanel: "#F7FBF9", lightPlayer: "#E2F0EA", lightGlow: "#6FAF9A"
             )
         case .berry:
             return Skin(
@@ -208,14 +208,14 @@ struct AppBackground: View {
 
     var body: some View {
         ZStack {
-            // The window is clear; this is the glass the content floats on.
-            MaterialBackdrop()
-
+            // One opaque theme gradient for the whole window. The sidebar and
+            // player bar draw only tonal scrims over this, never their own
+            // material, so active/inactive state cannot change the colours.
             LinearGradient(
                 colors: [
-                    theme.backgroundTop.opacity(theme.isDark ? 0.70 : 0.80),
-                    theme.backgroundMiddle.opacity(theme.isDark ? 0.60 : 0.70),
-                    theme.backgroundBottom.opacity(theme.isDark ? 0.72 : 0.82),
+                    theme.backgroundTop,
+                    theme.backgroundMiddle,
+                    theme.backgroundBottom,
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing

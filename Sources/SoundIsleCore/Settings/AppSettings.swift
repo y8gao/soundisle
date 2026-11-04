@@ -1,7 +1,7 @@
 import Foundation
 
 public struct AppSettings: Codable, Equatable {
-    public var themePreset: String = "deepBlue"
+    public var themePreset: String = "celadon"
     public var themeMode: String = "system"
     public var customAccentHex: String?
     public var lyricsOpacity: Double = 0.26
@@ -28,7 +28,7 @@ public struct AppSettings: Codable, Equatable {
     /// older version never resets every preference at once.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        themePreset = try container.decodeIfPresent(String.self, forKey: .themePreset) ?? "deepBlue"
+        themePreset = try container.decodeIfPresent(String.self, forKey: .themePreset) ?? "celadon"
         themeMode = try container.decodeIfPresent(String.self, forKey: .themeMode) ?? "system"
         customAccentHex = try container.decodeIfPresent(String.self, forKey: .customAccentHex)
         lyricsOpacity = try container.decodeIfPresent(Double.self, forKey: .lyricsOpacity) ?? 0.26

@@ -13,7 +13,6 @@ final class ThemePaletteTests: XCTestCase {
         let expected: [(ThemePreset, String)] = [
             (.morning, "#C2703D"),
             (.inkAmber, "#F5B942"),
-            (.celadon, "#4FB89A"),
             (.berry, "#B48CF2"),
             (.seaSalt, "#3E8FB0"),
         ]
@@ -65,7 +64,7 @@ final class ThemePaletteTests: XCTestCase {
 
     func testSettingsStringsResolveToEnums() {
         let settings = AppSettings()
-        XCTAssertEqual(settings.preset, .deepBlue)
+        XCTAssertEqual(settings.preset, .celadon)
         XCTAssertEqual(settings.mode, .system)
 
         var custom = settings

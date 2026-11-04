@@ -55,8 +55,7 @@ struct PlayerBarView: View {
                 .padding(.top, 6)
         }
         .frame(height: 84)
-        .background(theme.playerTint.opacity(theme.isDark ? 0.34 : 0.62))
-        .background(.ultraThinMaterial)
+        .background(theme.backgroundBottom.opacity(theme.isDark ? 0.42 : 0.50))
         // Only the top 14pt takes hover/drag; the transport below stays free.
         .overlay(alignment: .top) {
             PlayerProgressLine(model: model, engine: model.engine)
