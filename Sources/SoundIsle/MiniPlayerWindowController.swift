@@ -1,8 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// The 520x66 floating capsule. It lives on every Space and never activates
-/// the app, so it can sit in a corner while another app has focus.
 @MainActor
 final class MiniPlayerWindowController {
     static let size = NSSize(width: 520, height: 66)
@@ -32,7 +30,7 @@ final class MiniPlayerWindowController {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = true
-        panel.becomesKeyOnlyIfNeeded = false
+        panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -66,7 +64,6 @@ final class MiniPlayerWindowController {
         applySettings()
         panel.setFrameOrigin(restoredOrigin())
         panel.orderFront(nil)
-        panel.makeKey()
         // `isVisible` only becomes true after ordering front, so the spectrum
         // consumer check must run afterwards.
         refreshSpectrumConsumers()
@@ -75,10 +72,6 @@ final class MiniPlayerWindowController {
     func hide() {
         panel.orderOut(nil)
         refreshSpectrumConsumers()
-    }
-
-    func isWindow(_ window: NSWindow) -> Bool {
-        window === panel
     }
 
     func toggle() {

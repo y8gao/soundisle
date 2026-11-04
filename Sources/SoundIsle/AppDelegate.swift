@@ -119,6 +119,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.clearSearchFocus()
         NSApp.windows.filter { isMainWindow($0) }.forEach { $0.makeFirstResponder(nil) }
         model.showMiniPlayer()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.trimMainMenu()
+        }
     }
 
     /// SwiftUI's default File/Edit/View/Window/Help menus are noise for this
@@ -131,16 +134,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Main window tracking
 
     @objc private func windowDidBecomeMain(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, isMainWindow(window) else { return }
-        mainWindow = window
-        // Returning from mini mode can restore the search field as first
-        // responder; explicitly resign it so playback shortcuts keep working.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-            window.makeFirstResponder(nil)
-            self?.model.clearSearchFocus()
+        if let window = notification.object as? NSWindow, isMainWindow(window) {
+            mainWindow = window
+            // Returning from mini mode can restore the search field as first
+            // responder; explicitly resign it so playback shortcuts keep working.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                window.makeFirstResponder(nil)
+                self?.model.clearSearchFocus()
+            }
         }
-        // SwiftUI rebuilds the menu when a window becomes key; trim after it
-        // settles. No menu observer here — that caused a rebuild loop.
+        // Any window becoming key (main or mini) can make SwiftUI rebuild its
+        // default menus; trim after it settles. No menu observer here — that
+        // caused a rebuild loop.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.trimMainMenu()
         }

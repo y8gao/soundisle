@@ -1987,7 +1987,7 @@ final class AppModel: ObservableObject {
               !isSettingsPresented,
               tagEditorRequest == nil,
               organizerRequest == nil,
-              isShortcutWindow,
+              isMainWindowKey,
               !isSearchFocused,
               !isEditingText else { return false }
 
@@ -2036,13 +2036,5 @@ final class AppModel: ObservableObject {
     private var isMainWindowKey: Bool {
         guard let window = NSApp.keyWindow else { return false }
         return !(window is NSPanel) && !window.isSheet && window.canBecomeMain
-    }
-
-    /// Playback keys work in the main window and in the mini player, once the
-    /// mini panel is key. Sheets and text editing still own the keyboard.
-    private var isShortcutWindow: Bool {
-        if isMainWindowKey { return true }
-        guard let window = NSApp.keyWindow else { return false }
-        return miniPlayer?.isWindow(window) ?? false
     }
 }
