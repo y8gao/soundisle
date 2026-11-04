@@ -32,7 +32,7 @@ final class MiniPlayerWindowController {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = true
-        panel.becomesKeyOnlyIfNeeded = true
+        panel.becomesKeyOnlyIfNeeded = false
         panel.isReleasedWhenClosed = false
         panel.animationBehavior = .none
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -66,6 +66,7 @@ final class MiniPlayerWindowController {
         applySettings()
         panel.setFrameOrigin(restoredOrigin())
         panel.orderFront(nil)
+        panel.makeKey()
         // `isVisible` only becomes true after ordering front, so the spectrum
         // consumer check must run afterwards.
         refreshSpectrumConsumers()
@@ -74,6 +75,10 @@ final class MiniPlayerWindowController {
     func hide() {
         panel.orderOut(nil)
         refreshSpectrumConsumers()
+    }
+
+    func isWindow(_ window: NSWindow) -> Bool {
+        window === panel
     }
 
     func toggle() {

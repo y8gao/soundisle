@@ -3,10 +3,11 @@ import Foundation
 /// The six shipped skins. Raw values are persisted in `AppSettings.themePreset`,
 /// so they must never change.
 public enum ThemePreset: String, Codable, CaseIterable, Hashable {
+    // Celadon is the default and intentionally first in the picker.
+    case celadon
     case deepBlue
     case morning
     case inkAmber
-    case celadon
     case berry
     case seaSalt
 

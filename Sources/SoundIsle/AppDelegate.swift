@@ -91,6 +91,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mainWindow = window
             window.deminiaturize(nil)
             window.makeKeyAndOrderFront(nil)
+            model.clearSearchFocus()
+            // SwiftUI can restore the search field as first responder when a
+            // window becomes key; clear it after the window settles.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                window.makeFirstResponder(nil)
+                self.model.clearSearchFocus()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.trimMainMenu()
+            }
         } else {
             // SwiftUI owns window creation; its "New Window" command is the
             // only AppKit-safe way to ask for one on macOS 12.
@@ -116,6 +127,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func windowDidBecomeMain(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, isMainWindow(window) else { return }
         mainWindow = window
+        // SwiftUI rebuilds the menu when a window becomes key; trim after it
+        // settles. No menu observer here — that caused a rebuild loop.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.trimMainMenu()
+        }
     }
 
     private func captureMainWindow() {

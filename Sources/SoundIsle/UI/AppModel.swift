@@ -1923,6 +1923,12 @@ final class AppModel: ObservableObject {
         endSearchFocusRequest = UUID()
     }
 
+    /// Used when returning from mini mode: the main window must not hand the
+    /// search field the keyboard focus, or space/⌘←/⌘→ stop working.
+    func clearSearchFocus() {
+        endSearchFocus()
+    }
+
     func dismissStatus() {
         statusMessage = nil
         showsFFmpegInstallPrompt = false
@@ -1980,7 +1986,7 @@ final class AppModel: ObservableObject {
               !isSettingsPresented,
               tagEditorRequest == nil,
               organizerRequest == nil,
-              isMainWindowKey,
+              isShortcutWindow,
               !isSearchFocused,
               !isEditingText else { return false }
 
@@ -2029,5 +2035,13 @@ final class AppModel: ObservableObject {
     private var isMainWindowKey: Bool {
         guard let window = NSApp.keyWindow else { return false }
         return !(window is NSPanel) && !window.isSheet && window.canBecomeMain
+    }
+
+    /// Playback keys work in the main window and in the mini player, once the
+    /// mini panel is key. Sheets and text editing still own the keyboard.
+    private var isShortcutWindow: Bool {
+        if isMainWindowKey { return true }
+        guard let window = NSApp.keyWindow else { return false }
+        return miniPlayer?.isWindow(window) ?? false
     }
 }
