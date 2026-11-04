@@ -9,9 +9,34 @@
 
 A native macOS player built for **listening to your local music while working**: fast to open, light on resources, and quiet by design. It scans folders recursively, manages playlists, lives in the menu bar, supports a mini player and floating desktop lyrics, repairs tags and garbled text, organizes files by tags, and transcodes non-native formats in the background.
 
-![SoundIsle main window](docs/screenshots/main-en.png)
+## Screenshots
 
+### Main window: your local library
+![Main window and local library](docs/screenshots/main-en.png)
+
+Scan folders recursively, read tags, artwork and durations, and sort by title, artist, album or length. The sidebar holds the library, folders and playlists.
+
+### Mini player: for working
+![Mini player](docs/screenshots/mini-en.png)
+
+Switching to the mini player tucks the main window away and leaves a small always-available strip that never steals focus. It also shows the current lyric line.
+
+### Desktop lyrics: sing along
+![Desktop lyrics](docs/screenshots/overlay-en.png)
+
+Lyrics float transparently over the desktop. Drag, resize, or lock them to click through; two lines show the current and next line, following the system light/dark appearance.
+
+### Lyrics page
 ![Lyrics page](docs/screenshots/lyrics-en.png)
+
+Click the cover in the player bar to switch between the track list and the full lyrics page.
+
+### Light and dark themes
+| Light | Dark |
+| --- | --- |
+| ![Light theme](docs/screenshots/main-en.png) | ![Dark theme](docs/screenshots/main-dark-en.png) |
+
+Six palettes — celadon, deep blue, morning, ink, berry and sea salt — follow the system appearance or pin to light or dark.
 
 ## Why SoundIsle
 
