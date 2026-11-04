@@ -94,7 +94,7 @@ struct MainWindowView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 7) {
                     NoteIcon(size: 14, color: palette.text.opacity(0.85))
-                    Text("声屿")
+                    Text(L("声屿"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(palette.text.opacity(0.85))
                 }
@@ -104,7 +104,7 @@ struct MainWindowView: View {
                 HStack(spacing: 6) {
                     Icons.search
                         .foregroundColor(palette.mutedText(0.45))
-                    TextField("搜索歌曲、歌手、专辑", text: $model.searchText)
+                    TextField(L("搜索歌曲、歌手、专辑"), text: $model.searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundColor(palette.text)
@@ -127,7 +127,7 @@ struct MainWindowView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("设置")
+                .help(L("设置"))
             }
         }
         // Leave room for the traffic lights of the hidden title bar.
@@ -150,10 +150,10 @@ struct MainWindowView: View {
                 VStack(spacing: 10) {
                     Icons.dropImport
                         .foregroundColor(palette.accent)
-                    Text("松开以导入")
+                    Text(L("松开以导入"))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(palette.text)
-                    Text("文件夹会递归扫描，单个文件会导入所在文件夹")
+                    Text(L("文件夹会递归扫描，单个文件会导入所在文件夹"))
                         .font(.system(size: 11))
                         .foregroundColor(palette.mutedText(0.55))
                 }

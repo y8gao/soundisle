@@ -79,11 +79,11 @@ struct PlayerBarView: View {
                 )
             }
             .buttonStyle(.plain)
-            .help(model.showsLyricsPage ? "返回歌曲列表" : "查看当前歌曲歌词")
-            .accessibilityLabel(model.showsLyricsPage ? "封面，返回歌曲列表" : "封面，打开歌词页")
+            .help(model.showsLyricsPage ? L("返回歌曲列表") : L("查看当前歌曲歌词"))
+            .accessibilityLabel(model.showsLyricsPage ? L("封面，返回歌曲列表") : L("封面，打开歌词页"))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.currentTrack?.title ?? "未在播放")
+                Text(model.currentTrack?.title ?? L("未在播放"))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundColor(theme.text)
                     .lineLimit(1)
@@ -96,8 +96,8 @@ struct PlayerBarView: View {
     }
 
     private var subtitle: String {
-        guard let track = model.currentTrack else { return "选择一首歌曲" }
-        if track.isMissing { return "文件缺失" }
+        guard let track = model.currentTrack else { return L("选择一首歌曲") }
+        if track.isMissing { return L("文件缺失") }
         let parts = [track.artist, track.album].filter { !$0.isEmpty }
         return parts.isEmpty ? " " : parts.joined(separator: " · ")
     }
@@ -118,10 +118,10 @@ struct PlayerBarView: View {
 
     private var modeHelp: String {
         switch model.queue.mode {
-        case .sequential: return "顺序播放"
-        case .repeatAll: return "列表循环"
-        case .repeatOne: return "单曲循环"
-        case .shuffle: return "随机播放"
+        case .sequential: return L("顺序播放")
+        case .repeatAll: return L("列表循环")
+        case .repeatOne: return L("单曲循环")
+        case .shuffle: return L("随机播放")
         }
     }
 
@@ -141,8 +141,8 @@ struct PlayerBarView: View {
             PlayerIconButton(icon: Icons.previous, size: 34) {
                 model.previous()
             }
-            .help("上一首")
-            .accessibilityLabel("上一首")
+            .help(L("上一首"))
+            .accessibilityLabel(L("上一首"))
 
             Button {
                 model.togglePlayPause()
@@ -159,14 +159,14 @@ struct PlayerBarView: View {
                 .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help(model.isPlaying ? "暂停" : "播放")
-            .accessibilityLabel(model.isPlaying ? "暂停" : "播放")
+            .help(model.isPlaying ? L("暂停") : L("播放"))
+            .accessibilityLabel(model.isPlaying ? L("暂停") : L("播放"))
 
             PlayerIconButton(icon: Icons.next, size: 34) {
                 model.next()
             }
-            .help("下一首")
-            .accessibilityLabel("下一首")
+            .help(L("下一首"))
+            .accessibilityLabel(L("下一首"))
         }
     }
 
@@ -185,14 +185,14 @@ struct PlayerBarView: View {
             PlayerIconButton(icon: Icons.lyrics(), size: 30) {
                 model.toggleLyricsVisibility()
             }
-            .help(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
-            .accessibilityLabel(model.isLyricsVisible ? "隐藏歌词" : "显示歌词")
+            .help(model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"))
+            .accessibilityLabel(model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"))
 
             PlayerIconButton(icon: Icons.symbol("rectangle.compress.vertical", size: 16), size: 30) {
                 model.showMiniPlayer()
             }
-            .help("切换到迷你窗口")
-            .accessibilityLabel("切换到迷你窗口")
+            .help(L("切换到迷你窗口"))
+            .accessibilityLabel(L("切换到迷你窗口"))
         }
     }
 }
@@ -330,7 +330,7 @@ private struct PlayerProgressLine: View {
         }
         .frame(height: 14)
         .accessibilityElement()
-        .accessibilityLabel("播放进度")
+        .accessibilityLabel(L("播放进度"))
         .accessibilityValue(
             "\(TimeText.string(dragValue ?? shownPosition)) / \(TimeText.string(shownDuration))"
         )
@@ -367,7 +367,7 @@ private struct PlayerBarTimes: View {
         .padding(.bottom, 4)
         .allowsHitTesting(false)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("播放时间")
+        .accessibilityLabel(L("播放时间"))
         .onReceive(engine.$position) { position = $0 }
         .onReceive(engine.$duration) { duration = $0 }
         .onAppear {
@@ -453,8 +453,8 @@ private struct VolumeButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-        .help(isMuted ? "取消静音" : "音量")
-        .accessibilityLabel(isMuted ? "取消静音" : "音量")
+        .help(isMuted ? L("取消静音") : L("音量"))
+        .accessibilityLabel(isMuted ? L("取消静音") : L("音量"))
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             VolumePopover(
                 volume: $volume,
@@ -492,8 +492,8 @@ private struct VolumePopover: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(isMuted ? "取消静音" : "静音")
-            .accessibilityLabel(isMuted ? "取消静音" : "静音")
+            .help(isMuted ? L("取消静音") : L("静音"))
+            .accessibilityLabel(isMuted ? L("取消静音") : L("静音"))
 
             Text("\(Int((volume * 100).rounded()))%")
                 .font(.system(size: 9.5))

@@ -51,6 +51,11 @@ fi
 cp "Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 cp "Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 cp "Resources/NoteGlyph.png" "$APP_BUNDLE/Contents/Resources/NoteGlyph.png"
+shopt -s nullglob
+for lproj in Resources/*.lproj; do
+    cp -R "$lproj" "$APP_BUNDLE/Contents/Resources/"
+done
+shopt -u nullglob
 codesign --force --sign - "$APP_BUNDLE"
 
 echo "已生成 $APP_BUNDLE"

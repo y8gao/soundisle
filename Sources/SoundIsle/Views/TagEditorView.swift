@@ -67,7 +67,7 @@ struct TagEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 11) {
                     if isBatch {
-                        Text("正在批量编辑 \(tracks.count) 首歌曲。留空的字段不会被修改。")
+                        Text(Lf("正在批量编辑 %d 首歌曲。留空的字段不会被修改。", tracks.count))
                             .font(.system(size: 11.5))
                             .foregroundColor(palette.text.opacity(0.6))
                     }
@@ -77,49 +77,49 @@ struct TagEditorView: View {
 
                     VStack(alignment: .leading, spacing: 11) {
                         TagTextFieldRow(
-                            label: "标题",
+                            label: L("标题"),
                             text: $title,
                             disabled: !capabilities.canWrite,
-                            placeholder: placeholder("标题")
+                            placeholder: placeholder(L("标题"))
                         )
                         TagTextFieldRow(
-                            label: "歌手",
+                            label: L("歌手"),
                             text: $artist,
                             disabled: !capabilities.canWrite,
-                            placeholder: placeholder("歌手")
+                            placeholder: placeholder(L("歌手"))
                         )
                         TagTextFieldRow(
-                            label: "专辑",
+                            label: L("专辑"),
                             text: $album,
                             disabled: !capabilities.canWrite,
-                            placeholder: placeholder("专辑")
+                            placeholder: placeholder(L("专辑"))
                         )
                         TagTextFieldRow(
-                            label: "专辑歌手",
+                            label: L("专辑歌手"),
                             text: $albumArtist,
                             disabled: !canEditAlbumArtist,
-                            placeholder: placeholder("专辑歌手")
+                            placeholder: placeholder(L("专辑歌手"))
                         )
                     }
 
                     VStack(alignment: .leading, spacing: 11) {
                         TagNumberFieldRow(
-                            label: "年份",
+                            label: L("年份"),
                             text: $year,
                             disabled: !capabilities.canWrite,
-                            placeholder: placeholder("年份")
+                            placeholder: placeholder(L("年份"))
                         )
                         TagNumberFieldRow(
-                            label: "曲目号",
+                            label: L("曲目号"),
                             text: $trackNumber,
                             disabled: !capabilities.canWrite,
-                            placeholder: placeholder("曲目号")
+                            placeholder: placeholder(L("曲目号"))
                         )
                         TagTextFieldRow(
-                            label: "流派",
+                            label: L("流派"),
                             text: $genre,
                             disabled: !capabilities.canWrite,
-                            placeholder: placeholder("流派")
+                            placeholder: placeholder(L("流派"))
                         )
                     }
 
@@ -133,7 +133,7 @@ struct TagEditorView: View {
                     }
 
                     if isBatch {
-                        Text("留空的文本字段不会被修改。")
+                        Text(L("留空的文本字段不会被修改。"))
                             .font(.system(size: 10.5))
                             .foregroundColor(palette.mutedText(0.4))
                     }
@@ -151,10 +151,10 @@ struct TagEditorView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(isBatch ? "批量编辑标签" : "编辑标签")
+            Text(isBatch ? L("批量编辑标签") : L("编辑标签"))
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(palette.text)
-            Text(isBatch ? "\(tracks.count) 首" : tracks.first?.title ?? "")
+            Text(isBatch ? Lf("%d 首", tracks.count) : tracks.first?.title ?? "")
                 .font(.system(size: 11.5))
                 .foregroundColor(palette.mutedText(0.5))
                 .lineLimit(1)
@@ -176,9 +176,9 @@ struct TagEditorView: View {
                     .foregroundColor(palette.text.opacity(0.6))
             }
             Spacer()
-            Button("取消") { dismiss() }
+            Button(L("取消")) { dismiss() }
                 .disabled(model.fileWorkProgress != nil)
-            Button("保存") { save() }
+            Button(L("保存")) { save() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!capabilities.canWrite || tracks.isEmpty || model.fileWorkProgress != nil)
         }
@@ -187,7 +187,7 @@ struct TagEditorView: View {
     }
 
     private func placeholder(_ label: String) -> String {
-        isBatch ? "留空不修改" : label
+        isBatch ? L("留空不修改") : label
     }
 
     private func limitationNote(_ text: String) -> some View {
@@ -230,9 +230,9 @@ struct TagEditorView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    Button("选择封面…") { chooseCover() }
+                    Button(L("选择封面…")) { chooseCover() }
                     if artworkEdit != nil || currentArtworkBase64 != nil {
-                        Button("移除封面") {
+                        Button(L("移除封面")) {
                             artworkEdit = ""
                             previewImage = nil
                         }
@@ -259,12 +259,12 @@ struct TagEditorView: View {
 
     private var coverHint: String {
         if !capabilities.canWriteArtwork {
-            return capabilities.limitation ?? "该格式不支持写入封面。"
+            return capabilities.limitation ?? L("该格式不支持写入封面。")
         }
-        if artworkEdit == "" { return "保存后将移除封面。" }
-        if artworkEdit != nil { return "已选择新封面，保存后写入。" }
-        if isBatch { return "留空则不修改封面。" }
-        return currentArtworkBase64 == nil ? "无封面" : "当前封面"
+        if artworkEdit == "" { return L("保存后将移除封面。") }
+        if artworkEdit != nil { return L("已选择新封面，保存后写入。") }
+        if isBatch { return L("留空则不修改封面。") }
+        return currentArtworkBase64 == nil ? L("无封面") : L("当前封面")
     }
 
     private func chooseCover() {
@@ -272,8 +272,8 @@ struct TagEditorView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "选择"
-        panel.message = "选择封面图片"
+        panel.prompt = L("选择")
+        panel.message = L("选择封面图片")
         panel.allowedContentTypes = [.png, .jpeg, .gif, .bmp, .tiff]
         guard panel.runModal() == .OK,
               let url = panel.url,
@@ -326,14 +326,14 @@ struct TagEditorView: View {
                 edits.artist = trimmedOrNil(artist)
                 edits.album = trimmedOrNil(album)
                 edits.genre = trimmedOrNil(genre)
-                if let parsed = parseNumber(year, label: "年份", range: 1...9999) {
+                if let parsed = parseNumber(year, label: L("年份"), range: 1...9999) {
                     guard let value = parsed.value else {
                         errorMessage = parsed.error
                         return nil
                     }
                     yearValue = value
                 }
-                if let parsed = parseNumber(trackNumber, label: "曲目号", range: 1...65535) {
+                if let parsed = parseNumber(trackNumber, label: L("曲目号"), range: 1...65535) {
                     guard let value = parsed.value else {
                         errorMessage = parsed.error
                         return nil
@@ -351,7 +351,7 @@ struct TagEditorView: View {
                 edits.artist = changedText(artist, initial.artist)
                 edits.album = changedText(album, initial.album)
                 edits.genre = changedText(genre, initial.genre)
-                switch changedNumber(year, initial: initial.year, label: "年份", range: 1...9999) {
+                switch changedNumber(year, initial: initial.year, label: L("年份"), range: 1...9999) {
                 case .unchanged: break
                 case .value(let value): yearValue = value
                 case .invalid(let message): errorMessage = message; return nil
@@ -359,7 +359,7 @@ struct TagEditorView: View {
                 switch changedNumber(
                     trackNumber,
                     initial: initial.trackNumber,
-                    label: "曲目号",
+                    label: L("曲目号"),
                     range: 1...65535
                 ) {
                 case .unchanged: break
@@ -411,7 +411,7 @@ struct TagEditorView: View {
             return initial == nil ? .unchanged : .value(0)
         }
         guard let value = Int(trimmed), range.contains(value) else {
-            return .invalid("\(label)必须是 \(range.lowerBound)–\(range.upperBound) 之间的整数。")
+            return .invalid(Lf("%@必须是 %d–%d 之间的整数。", label, range.lowerBound, range.upperBound))
         }
         return value == initial ? .unchanged : .value(value)
     }
@@ -426,7 +426,7 @@ struct TagEditorView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         guard let value = Int(trimmed), range.contains(value) else {
-            return (nil, "\(label)必须是 \(range.lowerBound)–\(range.upperBound) 之间的整数。")
+            return (nil, Lf("%@必须是 %d–%d 之间的整数。", label, range.lowerBound, range.upperBound))
         }
         return (value, nil)
     }
@@ -452,30 +452,30 @@ private struct TagTextFieldRow: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(size: 12))
                     .disabled(disabled)
-                Button("修复乱码") {
+                Button(L("修复乱码")) {
                     if let fixed = MojibakeRepair.repaired(text) {
                         preview = fixed
                         message = nil
                     } else {
                         preview = nil
-                        message = "未检测到乱码"
+                        message = L("未检测到乱码")
                     }
                 }
                 .disabled(disabled || text.isEmpty)
-                .help("按 UTF-8 或 GB18030 还原被错误解码的中文")
+                .help(L("按 UTF-8 或 GB18030 还原被错误解码的中文"))
             }
             if let preview {
                 HStack(spacing: 8) {
-                    Text("修复预览：\(preview)")
+                    Text(Lf("修复预览：%@", preview))
                         .font(.system(size: 11))
                         .foregroundColor(theme.accentLight)
                         .lineLimit(1)
-                    Button("应用") {
+                    Button(L("应用")) {
                         text = preview
                         self.preview = nil
                         message = nil
                     }
-                    Button("取消") { self.preview = nil }
+                    Button(L("取消")) { self.preview = nil }
                 }
                 .padding(.leading, 80)
             } else if let message {

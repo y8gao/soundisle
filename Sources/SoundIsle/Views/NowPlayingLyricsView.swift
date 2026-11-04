@@ -15,16 +15,16 @@ struct NowPlayingLyricsView: View {
     }
 
     private var subtitle: String {
-        guard let track else { return "选择一首歌曲" }
+        guard let track else { return L("选择一首歌曲") }
         let parts = [track.artist, track.album].filter { !$0.isEmpty }
         return parts.isEmpty ? " " : parts.joined(separator: " · ")
     }
 
     private var originLabel: String? {
         switch model.lyricsOrigin {
-        case .sidecar: return "本地歌词"
-        case .online: return "在线歌词"
-        case .override: return "覆盖歌词"
+        case .sidecar: return L("本地歌词")
+        case .online: return L("在线歌词")
+        case .override: return L("覆盖歌词")
         case .none: return nil
         }
     }
@@ -101,7 +101,7 @@ struct NowPlayingLyricsView: View {
             } label: {
                 HStack(spacing: 5) {
                     Icons.symbol("chevron.left", size: 10, weight: .semibold)
-                    Text("返回列表")
+                    Text(L("返回列表"))
                         .font(.system(size: 11.5, weight: .medium))
                 }
                 .foregroundColor(theme.accent.opacity(0.9))
@@ -112,8 +112,8 @@ struct NowPlayingLyricsView: View {
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .help("返回歌曲列表")
-            .accessibilityLabel("返回列表")
+            .help(L("返回歌曲列表"))
+            .accessibilityLabel(L("返回列表"))
 
             Spacer(minLength: 8)
         }
@@ -136,11 +136,11 @@ struct NowPlayingLyricsView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .help("返回歌曲列表")
-                .accessibilityLabel("专辑封面，点击返回歌曲列表")
+                .help(L("返回歌曲列表"))
+                .accessibilityLabel(L("专辑封面，点击返回歌曲列表"))
 
                 VStack(spacing: 4) {
-                    Text(track?.title ?? "未在播放")
+                    Text(track?.title ?? L("未在播放"))
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(theme.accent)
                         .multilineTextAlignment(.center)
@@ -164,7 +164,7 @@ struct NowPlayingLyricsView: View {
                     .frame(height: 20)
                     .background(theme.accent.opacity(0.16), in: Capsule())
                     .overlay(Capsule().strokeBorder(theme.accent.opacity(0.28), lineWidth: 0.5))
-                    .accessibilityLabel("歌词来源：\(originLabel)")
+                    .accessibilityLabel(Lf("歌词来源：%@", originLabel))
                 }
 
                 actionButtons
@@ -178,9 +178,9 @@ struct NowPlayingLyricsView: View {
     private var actionButtons: some View {
         VStack(spacing: 6) {
             lyricAction(
-                model.lyrics == nil ? "导入歌词…" : "更换歌词…",
+                model.lyrics == nil ? L("导入歌词…") : L("更换歌词…"),
                 symbol: "square.and.arrow.down",
-                help: "选择 .lrc 或 .txt 文件",
+                help: L("选择 .lrc 或 .txt 文件"),
                 isPrimary: true,
                 isDisabled: model.currentTrack == nil
             ) {
@@ -188,9 +188,9 @@ struct NowPlayingLyricsView: View {
             }
 
             lyricAction(
-                "重试匹配",
+                L("重试匹配"),
                 symbol: "arrow.clockwise",
-                help: "重新查找同名歌词或在线匹配",
+                help: L("重新查找同名歌词或在线匹配"),
                 isDisabled: model.currentTrack == nil || model.isResolvingLyrics
             ) {
                 model.retryLyrics()
@@ -198,9 +198,9 @@ struct NowPlayingLyricsView: View {
 
             if model.hasLyricsOverride {
                 lyricAction(
-                    "恢复自动匹配",
+                    L("恢复自动匹配"),
                     symbol: "arrow.uturn.backward",
-                    help: "删除手动导入的歌词，恢复自动匹配",
+                    help: L("删除手动导入的歌词，恢复自动匹配"),
                     isDisabled: false
                 ) {
                     model.restoreAutomaticLyrics()
@@ -328,10 +328,10 @@ struct NowPlayingLyricsView: View {
             Spacer(minLength: 0)
             Icons.symbol("text.alignleft", size: 34, weight: .light)
                 .foregroundColor(theme.mutedText(0.3))
-            Text(model.isResolvingLyrics ? "正在匹配歌词…" : "暂无歌词")
+            Text(model.isResolvingLyrics ? L("正在匹配歌词…") : L("暂无歌词"))
                 .font(.system(size: 15, weight: .medium))
                 .foregroundColor(theme.text.opacity(0.85))
-            Text(model.isResolvingLyrics ? "正在查找同名歌词与在线来源" : "可以重试匹配，或导入本地歌词文件")
+            Text(model.isResolvingLyrics ? L("正在查找同名歌词与在线来源") : L("可以重试匹配，或导入本地歌词文件"))
                 .font(.system(size: 11.5))
                 .foregroundColor(theme.mutedText(0.5))
 
@@ -339,7 +339,7 @@ struct NowPlayingLyricsView: View {
                 Button {
                     model.retryLyrics()
                 } label: {
-                    Text("重试匹配")
+                    Text(L("重试匹配"))
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundColor(theme.accentLight)
                         .padding(.horizontal, 13)
@@ -351,13 +351,13 @@ struct NowPlayingLyricsView: View {
                 .buttonStyle(.plain)
                 .disabled(model.currentTrack == nil || model.isResolvingLyrics)
                 .opacity(model.currentTrack == nil || model.isResolvingLyrics ? 0.45 : 1)
-                .help("重新查找同名歌词或在线匹配")
-                .accessibilityLabel("重试匹配")
+                .help(L("重新查找同名歌词或在线匹配"))
+                .accessibilityLabel(L("重试匹配"))
 
                 Button {
                     model.promptImportLyrics()
                 } label: {
-                    Text("导入歌词…")
+                    Text(L("导入歌词…"))
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundColor(theme.accentLight)
                         .padding(.horizontal, 13)
@@ -369,8 +369,8 @@ struct NowPlayingLyricsView: View {
                 .buttonStyle(.plain)
                 .disabled(model.currentTrack == nil)
                 .opacity(model.currentTrack == nil ? 0.45 : 1)
-                .help("选择 .lrc 或 .txt 文件")
-                .accessibilityLabel("导入歌词")
+                .help(L("选择 .lrc 或 .txt 文件"))
+                .accessibilityLabel(L("导入歌词"))
             }
             Spacer(minLength: 0)
         }

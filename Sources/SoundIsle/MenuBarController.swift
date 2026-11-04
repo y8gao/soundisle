@@ -26,10 +26,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
 
         let image = NoteGlyph.templateImage(size: 16)
-            ?? NSImage(systemSymbolName: "music.note", accessibilityDescription: "声屿")
+            ?? NSImage(systemSymbolName: "music.note", accessibilityDescription: L("声屿"))
         image?.isTemplate = true
         statusItem.button?.image = image
-        statusItem.button?.toolTip = "声屿"
+        statusItem.button?.toolTip = L("声屿")
 
         menu.autoenablesItems = false
         menu.delegate = self
@@ -48,32 +48,32 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(trackItem)
         menu.addItem(.separator())
 
-        addItem(model.isPlaying ? "暂停（空格）" : "播放（空格）", action: #selector(togglePlayPause))
-        addItem("上一首（⌘←）", action: #selector(previous))
-        addItem("下一首（⌘→）", action: #selector(next))
+        addItem(model.isPlaying ? L("暂停（空格）") : L("播放（空格）"), action: #selector(togglePlayPause))
+        addItem(L("上一首（⌘←）"), action: #selector(previous))
+        addItem(L("下一首（⌘→）"), action: #selector(next))
         menu.addItem(.separator())
 
         // One toggle instead of two items: the mini and the main window are
         // mutually exclusive, so the label names the destination.
         if miniPlayer.isVisible {
-            addItem("返回主窗口", action: #selector(showMainFromMenu))
+            addItem(L("返回主窗口"), action: #selector(showMainFromMenu))
         } else {
-            addItem("迷你模式", action: #selector(showMiniFromMenu))
+            addItem(L("迷你模式"), action: #selector(showMiniFromMenu))
         }
         menu.addItem(.separator())
 
-        addItem(model.isLyricsVisible ? "隐藏歌词" : "显示歌词", action: #selector(toggleLyrics))
-        addItem(model.isLyricsLocked ? "解锁歌词" : "锁定歌词", action: #selector(toggleLyricsLock))
-        let importItem = addItem("更换歌词…", action: #selector(importLyrics))
+        addItem(model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"), action: #selector(toggleLyrics))
+        addItem(model.isLyricsLocked ? L("解锁歌词") : L("锁定歌词"), action: #selector(toggleLyricsLock))
+        let importItem = addItem(L("更换歌词…"), action: #selector(importLyrics))
         importItem.isEnabled = model.currentTrack != nil
-        let restoreItem = addItem("恢复自动匹配", action: #selector(restoreAutomaticLyrics))
+        let restoreItem = addItem(L("恢复自动匹配"), action: #selector(restoreAutomaticLyrics))
         restoreItem.isEnabled = model.hasLyricsOverride
         if model.canRetryLyrics {
-            addItem("重试匹配", action: #selector(retryLyrics))
+            addItem(L("重试匹配"), action: #selector(retryLyrics))
         }
         menu.addItem(.separator())
 
-        addItem("退出声屿", action: #selector(quit), keyEquivalent: "q")
+        addItem(L("退出声屿"), action: #selector(quit), keyEquivalent: "q")
     }
 
     @discardableResult
@@ -89,9 +89,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     private var currentTrackTitle: String {
-        guard let track = model.currentTrack else { return "未在播放" }
+        guard let track = model.currentTrack else { return L("未在播放") }
         let line = track.artist.isEmpty ? track.title : "\(track.title) — \(track.artist)"
-        return track.isMissing ? "\(line)（文件缺失）" : line
+        return track.isMissing ? Lf("%@（文件缺失）", line) : line
     }
 
     // MARK: - Actions

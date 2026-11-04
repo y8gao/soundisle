@@ -133,21 +133,21 @@ struct LyricsOverlayView: View {
             }
         } else {
             VStack(spacing: 7) {
-                Text(model.isResolvingLyrics ? "正在匹配歌词…" : "暂无歌词")
+                Text(model.isResolvingLyrics ? L("正在匹配歌词…") : L("暂无歌词"))
                     .font(.system(size: max(13, fontSize * 0.6), weight: .medium))
                     .foregroundColor(palette.text.opacity(0.8))
                 HStack(spacing: 10) {
-                    Button("导入歌词…") {
+                    Button(L("导入歌词…")) {
                         model.promptImportLyrics()
                     }
                     .disabled(model.currentTrack == nil)
-                    .help("选择 .lrc 或 .txt 文件")
+                    .help(L("选择 .lrc 或 .txt 文件"))
 
-                    Button("重试匹配") {
+                    Button(L("重试匹配")) {
                         model.retryLyrics()
                     }
                     .disabled(model.currentTrack == nil || model.isResolvingLyrics)
-                    .help("重新查找同名歌词或在线匹配")
+                    .help(L("重新查找同名歌词或在线匹配"))
                 }
                 .buttonStyle(.plain)
                 .font(.system(size: 11))
@@ -161,17 +161,17 @@ struct LyricsOverlayView: View {
     /// the app menu and the menu bar.
     @ViewBuilder
     private var lyricsMenu: some View {
-        Button("更换歌词…") {
+        Button(L("更换歌词…")) {
             model.promptImportLyrics()
         }
         .disabled(model.currentTrack == nil)
 
-        Button("恢复自动匹配") {
+        Button(L("恢复自动匹配")) {
             model.restoreAutomaticLyrics()
         }
         .disabled(!model.hasLyricsOverride)
 
-        Button("重试匹配") {
+        Button(L("重试匹配")) {
             model.retryLyrics()
         }
         .disabled(model.currentTrack == nil || model.isResolvingLyrics)
@@ -232,33 +232,33 @@ struct LyricsOverlayView: View {
         VStack {
             Spacer()
             HStack(spacing: 5) {
-                controlButton("lock.open", help: "锁定歌词") {
+                controlButton("lock.open", help: L("锁定歌词")) {
                     model.setLyricsLocked(true)
                 }
-                controlButton("textformat.size.smaller", help: "缩小") {
+                controlButton("textformat.size.smaller", help: L("缩小")) {
                     onResize(-40)
                 }
-                controlButton("textformat.size.larger", help: "放大") {
+                controlButton("textformat.size.larger", help: L("放大")) {
                     onResize(40)
                 }
                 Slider(value: $opacity, in: 0.05...0.9, onEditingChanged: { editing in
                     if !editing { model.setLyricsOpacity(opacity) }
                 })
                 .frame(width: 62)
-                .help("悬停背景不透明度")
+                .help(L("悬停背景不透明度"))
 
-                textButton(lineMode == "two" ? "双行" : "单行", help: "切换单行 / 双行") {
+                textButton(lineMode == "two" ? L("双行") : L("单行"), help: L("切换单行 / 双行")) {
                     lineMode = lineMode == "two" ? "one" : "two"
                     model.setLyricsLineMode(lineMode)
                 }
-                textButton("描边", help: "文字描边", isOn: outline) {
+                textButton(L("描边"), help: L("文字描边"), isOn: outline) {
                     outline.toggle()
                     model.setLyricsOutline(outline)
                 }
-                controlButton("rectangle.compress.vertical", help: "切换到迷你窗口") {
+                controlButton("rectangle.compress.vertical", help: L("切换到迷你窗口")) {
                     model.showMiniPlayer()
                 }
-                controlButton("xmark", help: "关闭歌词") {
+                controlButton("xmark", help: L("关闭歌词")) {
                     model.setLyricsVisible(false)
                 }
             }

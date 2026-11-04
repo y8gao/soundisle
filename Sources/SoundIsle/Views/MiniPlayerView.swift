@@ -83,7 +83,7 @@ struct MiniPlayerView: View {
                 .allowsHitTesting(false)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.currentTrack?.title ?? "未在播放")
+                Text(model.currentTrack?.title ?? L("未在播放"))
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundColor(palette.text)
                     .lineLimit(1)
@@ -108,24 +108,24 @@ struct MiniPlayerView: View {
                 .allowsHitTesting(false)
 
             HStack(spacing: 4) {
-                MiniButton(icon: Icons.symbol("backward.end", size: 13), size: 26, help: "上一首") {
+                MiniButton(icon: Icons.symbol("backward.end", size: 13), size: 26, help: L("上一首")) {
                     model.previous()
                 }
                 MiniButton(
                     icon: Icons.symbol(model.isPlaying ? "pause.fill" : "play.fill", size: 14),
                     size: 34,
-                    help: model.isPlaying ? "暂停" : "播放",
+                    help: model.isPlaying ? L("暂停") : L("播放"),
                     isPrimary: true
                 ) {
                     model.togglePlayPause()
                 }
-                MiniButton(icon: Icons.symbol("forward.end", size: 13), size: 26, help: "下一首") {
+                MiniButton(icon: Icons.symbol("forward.end", size: 13), size: 26, help: L("下一首")) {
                     model.next()
                 }
                 MiniButton(
                     icon: Icons.symbol("rectangle.expand.vertical", size: 14),
                     size: 28,
-                    help: "展开主窗口"
+                    help: L("展开主窗口")
                 ) {
                     onExpand()
                 }
@@ -145,14 +145,14 @@ struct MiniPlayerView: View {
     }
 
     private var subtitle: String {
-        guard let track = model.currentTrack else { return "选择一首歌曲" }
-        if track.isMissing { return "文件缺失" }
+        guard let track = model.currentTrack else { return L("选择一首歌曲") }
+        if track.isMissing { return L("文件缺失") }
         if let lyric = model.currentLyricText?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !lyric.isEmpty {
             return lyric
         }
-        return track.artist.isEmpty ? "未知歌手" : track.artist
+        return track.artist.isEmpty ? L("未知歌手") : track.artist
     }
 
     private var progressLine: some View {

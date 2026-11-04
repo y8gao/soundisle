@@ -36,11 +36,11 @@ struct SettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("设置")
+                Text(L("设置"))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(palette.text)
                 Spacer()
-                Button("完成") {
+                Button(L("完成")) {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -91,24 +91,24 @@ struct SettingsView: View {
     // MARK: - Tag editing
 
     private var tagEditingSection: some View {
-        sectionCard(icon: Icons.settingsTags, title: "标签编辑") {
-            Text("每次保存都会记录修改前后的标签，最多保留 50 条。")
+        sectionCard(icon: Icons.settingsTags, title: L("标签编辑")) {
+            Text(L("每次保存都会记录修改前后的标签，最多保留 50 条。"))
                 .font(.system(size: 11))
                 .foregroundColor(palette.mutedText(0.5))
             HStack(spacing: 10) {
-                Button("撤销最近一次标签编辑") {
+                Button(L("撤销最近一次标签编辑")) {
                     notice = model.undoLastTagEdit()
                 }
                 .disabled(!model.canUndoTagEdit || model.fileWorkProgress != nil)
 
-                Button("清空编辑撤销记录") {
+                Button(L("清空编辑撤销记录")) {
                     if confirmClearUndo() {
                         notice = model.clearTagUndoHistory()
                     }
                 }
                 .disabled(model.tagUndoCount == 0 || model.fileWorkProgress != nil)
 
-                Text("\(model.tagUndoCount) 条记录")
+                Text(Lf("%d 条记录", model.tagUndoCount))
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.mutedText(0.4))
             }
@@ -130,14 +130,14 @@ struct SettingsView: View {
         let missing = model.library.missingTracks
         let unreadable = model.library.unreadableURLs
         if !missing.isEmpty || !unreadable.isEmpty || folderNotice != nil {
-            sectionCard(icon: Icons.settingsFolders, title: "文件状态") {
+            sectionCard(icon: Icons.settingsFolders, title: L("文件状态")) {
                 if !missing.isEmpty {
                     HStack(spacing: 8) {
-                        Text("缺失文件 \(missing.count) 首")
+                        Text(Lf("缺失文件 %d 首", missing.count))
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(palette.warning)
                         Spacer(minLength: 8)
-                        Button("移除缺失条目") {
+                        Button(L("移除缺失条目")) {
                             folderNotice = model.removeMissingTracks()
                         }
                     }
@@ -150,16 +150,16 @@ struct SettingsView: View {
                                 .truncationMode(.middle)
                                 .help(track.url.path)
                             Spacer(minLength: 6)
-                            Button("重新定位…") {
+                            Button(L("重新定位…")) {
                                 relocate(track)
                             }
-                            .help("选择这个文件的新位置")
+                            .help(L("选择这个文件的新位置"))
                             if FileManager.default.fileExists(atPath: track.url.path) {
-                                Button("在 Finder 中显示") {
+                                Button(L("在 Finder 中显示")) {
                                     NSWorkspace.shared.activateFileViewerSelecting([track.url])
                                 }
                             }
-                            Button("移除") {
+                            Button(L("移除")) {
                                 folderNotice = model.removeMissingTrack(track)
                             }
                         }
@@ -169,7 +169,7 @@ struct SettingsView: View {
 
                 if !unreadable.isEmpty {
                     Divider().overlay(palette.hairline)
-                    Text("无法读取 \(unreadable.count) 个文件")
+                    Text(Lf("无法读取 %d 个文件", unreadable.count))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(palette.warning)
                     ForEach(unreadable.prefix(3), id: \.self) { url in
@@ -180,7 +180,7 @@ struct SettingsView: View {
                             .truncationMode(.middle)
                     }
                     if unreadable.count > 3 {
-                        Text("另有 \(unreadable.count - 3) 个…")
+                        Text(Lf("另有 %d 个…", unreadable.count - 3))
                             .font(.system(size: 10.5))
                             .foregroundColor(palette.mutedText(0.35))
                     }
@@ -199,12 +199,12 @@ struct SettingsView: View {
     // MARK: - Cache
 
     private var cacheSection: some View {
-        sectionCard(icon: Icons.settingsCache, title: "缓存") {
-            Text("不支持的格式会转换为 ALAC 后缓存在这里，清理不会删除原始文件。")
+        sectionCard(icon: Icons.settingsCache, title: L("缓存")) {
+            Text(L("不支持的格式会转换为 ALAC 后缓存在这里，清理不会删除原始文件。"))
                 .font(.system(size: 11))
                 .foregroundColor(palette.mutedText(0.5))
             HStack(spacing: 10) {
-                Button("清理缓存") {
+                Button(L("清理缓存")) {
                     cacheNotice = model.clearTranscodeCache()
                 }
                 .disabled(model.transcodeCacheBytes == 0)
@@ -219,17 +219,17 @@ struct SettingsView: View {
                 Text(model.ffmpegPathText)
                     .font(.system(size: 10.5))
                     .foregroundColor(
-                        model.ffmpegPathText == "未找到"
+                        model.ffmpegPathText == L("未找到")
                             ? palette.warning
                             : palette.mutedText(0.5)
                     )
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: 6)
-                Button("重新检测") {
+                Button(L("重新检测")) {
                     cacheNotice = model.redetectFFmpeg()
                 }
-                Button("选择文件…") {
+                Button(L("选择文件…")) {
                     if let message = model.chooseFFmpegPath() {
                         cacheNotice = message
                     }
@@ -247,13 +247,13 @@ struct SettingsView: View {
     // MARK: - Lyrics
 
     private var lyricsSection: some View {
-        sectionCard(icon: Icons.settingsLyrics, title: "歌词") {
-            Text("桌面歌词窗与在线歌词来源。")
+        sectionCard(icon: Icons.settingsLyrics, title: L("歌词")) {
+            Text(L("桌面歌词窗与在线歌词来源。"))
                 .font(.system(size: 11))
                 .foregroundColor(palette.mutedText(0.5))
 
             Toggle(
-                "启用在线歌词匹配",
+                L("启用在线歌词匹配"),
                 isOn: Binding(
                     get: { settings.onlineLyricsEnabled },
                     set: { model.setOnlineLyricsEnabled($0) }
@@ -264,7 +264,7 @@ struct SettingsView: View {
             .foregroundColor(palette.text.opacity(0.82))
 
             HStack(spacing: 10) {
-                Text("歌词源地址")
+                Text(L("歌词源地址"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
                     .frame(width: 92, alignment: .leading)
@@ -278,7 +278,7 @@ struct SettingsView: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 11))
                 .onSubmit { saveLyricsEndpoint() }
-                Button("恢复默认") {
+                Button(L("恢复默认")) {
                     lyricsEndpointText = ""
                     lyricsEndpointNotice = nil
                     _ = model.setLyricsEndpoint(nil)
@@ -288,7 +288,7 @@ struct SettingsView: View {
                         && lyricsEndpointText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 )
             }
-            Text("兼容 LRCLIB 接口；也可填直接返回 LRC 文本的地址")
+            Text(L("兼容 LRCLIB 接口；也可填直接返回 LRC 文本的地址"))
                 .font(.system(size: 10.5))
                 .foregroundColor(palette.mutedText(0.45))
             if let lyricsEndpointNotice {
@@ -299,7 +299,7 @@ struct SettingsView: View {
             }
 
             HStack(spacing: 10) {
-                Text("悬停背景不透明度")
+                Text(L("悬停背景不透明度"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
                     .frame(width: 120, alignment: .leading)
@@ -318,7 +318,7 @@ struct SettingsView: View {
             }
 
             Toggle(
-                "歌词文字描边",
+                L("歌词文字描边"),
                 isOn: Binding(
                     get: { settings.lyricsOutline },
                     set: { model.setLyricsOutline($0) }
@@ -329,7 +329,7 @@ struct SettingsView: View {
             .foregroundColor(palette.text.opacity(0.82))
 
             HStack(spacing: 10) {
-                Text("显示行数")
+                Text(L("显示行数"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
                     .frame(width: 92, alignment: .leading)
@@ -340,8 +340,8 @@ struct SettingsView: View {
                         set: { model.setLyricsLineMode($0) }
                     )
                 ) {
-                    Text("单行").tag("one")
-                    Text("双行").tag("two")
+                    Text(L("单行")).tag("one")
+                    Text(L("双行")).tag("two")
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -353,19 +353,51 @@ struct SettingsView: View {
     // MARK: - Appearance
 
     private var appearanceSection: some View {
-        sectionCard(icon: Icons.settingsAppearance, title: "外观") {
-            Text("主题皮肤")
-                .font(.system(size: 11))
-                .foregroundColor(palette.mutedText(0.55))
+        sectionCard(icon: Icons.settingsAppearance, title: L("外观")) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Text(L("语言"))
+                        .font(.system(size: 11.5))
+                        .foregroundColor(palette.text.opacity(0.75))
+                        .frame(width: 92, alignment: .leading)
+                    Picker(
+                        "",
+                        selection: Binding(
+                            get: { settings.appLanguage },
+                            set: { model.setAppLanguage($0) }
+                        )
+                    ) {
+                        Text(L("跟随系统")).tag("system")
+                        Text(L("中文")).tag("zh")
+                        Text("English").tag("en")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 240)
+                    Spacer(minLength: 0)
+                }
 
-            HStack(spacing: 8) {
-                ForEach(ThemePreset.allCases, id: \.self) { preset in
-                    presetSwatch(preset)
+                Text(L("更改语言后需要重启声屿。"))
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.mutedText(0.45))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Divider().overlay(palette.hairline)
+
+                Text(L("主题皮肤"))
+                    .font(.system(size: 11))
+                    .foregroundColor(palette.mutedText(0.55))
+
+                HStack(spacing: 8) {
+                    ForEach(ThemePreset.allCases, id: \.self) { preset in
+                        presetSwatch(preset)
+                    }
                 }
             }
 
             HStack(spacing: 10) {
-                Text("明暗模式")
+                Text(L("明暗模式"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
                     .frame(width: 92, alignment: .leading)
@@ -386,7 +418,7 @@ struct SettingsView: View {
             }
 
             HStack(spacing: 10) {
-                Text("自定义强调色")
+                Text(L("自定义强调色"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
                     .frame(width: 92, alignment: .leading)
@@ -397,8 +429,8 @@ struct SettingsView: View {
                     .foregroundColor(palette.onAccent)
                     .frame(width: 28, height: 22)
                     .background(palette.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .help("使用强调色时的文字对比度")
-                Button("恢复默认") {
+                    .help(L("使用强调色时的文字对比度"))
+                Button(L("恢复默认")) {
                     model.setCustomAccent(hex: nil)
                 }
                 .disabled(settings.customAccentHex == nil)
@@ -406,7 +438,7 @@ struct SettingsView: View {
             }
 
             HStack(spacing: 10) {
-                Text("列表行样式")
+                Text(L("列表行样式"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.text.opacity(0.75))
                     .frame(width: 92, alignment: .leading)
@@ -417,8 +449,8 @@ struct SettingsView: View {
                         set: { model.setRowStyle(cover: $0) }
                     )
                 ) {
-                    Text("序号").tag(false)
-                    Text("封面").tag(true)
+                    Text(L("序号")).tag(false)
+                    Text(L("封面")).tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -429,7 +461,7 @@ struct SettingsView: View {
             Divider().overlay(palette.hairline)
 
             Toggle(
-                "在播放条底部显示频谱",
+                L("在播放条底部显示频谱"),
                 isOn: Binding(
                     get: { settings.showMainSpectrum },
                     set: { model.setShowMainSpectrum($0) }
@@ -440,7 +472,7 @@ struct SettingsView: View {
             .foregroundColor(palette.text.opacity(0.82))
 
             Toggle(
-                "在屏幕录制中隐藏窗口",
+                L("在屏幕录制中隐藏窗口"),
                 isOn: Binding(
                     get: { settings.hideFromScreenCapture },
                     set: { model.setHideFromScreenCapture($0) }
@@ -451,7 +483,7 @@ struct SettingsView: View {
             .foregroundColor(palette.text.opacity(0.82))
 
             Toggle(
-                "迷你窗始终置顶",
+                L("迷你窗始终置顶"),
                 isOn: Binding(
                     get: { settings.miniAlwaysOnTop },
                     set: { model.setMiniAlwaysOnTop($0) }
@@ -462,7 +494,7 @@ struct SettingsView: View {
             .foregroundColor(palette.text.opacity(0.82))
 
             Toggle(
-                "关闭主窗口后继续运行",
+                L("关闭主窗口后继续运行"),
                 isOn: Binding(
                     get: { settings.keepRunningOnClose },
                     set: { model.setKeepRunningOnClose($0) }
@@ -606,8 +638,8 @@ struct SettingsView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "重新定位"
-        panel.message = "选择《\(track.title)》的新位置"
+        panel.prompt = L("重新定位")
+        panel.message = Lf("选择《%@》的新位置", track.title)
         panel.nameFieldStringValue = track.url.lastPathComponent
         let response = panel.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
@@ -617,10 +649,10 @@ struct SettingsView: View {
 
     private func confirmClearUndo() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "清空编辑撤销记录？"
-        alert.informativeText = "清空后无法再撤销之前保存的标签修改，音频文件本身不受影响。"
-        alert.addButton(withTitle: "清空")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L("清空编辑撤销记录？")
+        alert.informativeText = L("清空后无法再撤销之前保存的标签修改，音频文件本身不受影响。")
+        alert.addButton(withTitle: L("清空"))
+        alert.addButton(withTitle: L("取消"))
         let response = alert.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
         return response == .alertFirstButtonReturn

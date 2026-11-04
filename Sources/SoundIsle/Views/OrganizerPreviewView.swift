@@ -39,8 +39,8 @@ struct OrganizerPreviewView: View {
     }
 
     private static let presets = [
-        Preset(name: "歌手/专辑/曲目 歌名", template: "{artist}/{album}/{track} {title}"),
-        Preset(name: "歌手 - 歌名", template: "{artist} - {title}"),
+        Preset(name: L("歌手/专辑/曲目 歌名"), template: "{artist}/{album}/{track} {title}"),
+        Preset(name: L("歌手 - 歌名"), template: "{artist} - {title}"),
     ]
 
     init(model: AppModel, tracks: [Track]) {
@@ -90,10 +90,10 @@ struct OrganizerPreviewView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("整理文件")
+            Text(L("整理文件"))
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundColor(palette.text)
-            Text("\(tracks.count) 首 · 预览后才会执行")
+            Text(Lf("%d 首 · 预览后才会执行", tracks.count))
                 .font(.system(size: 11.5))
                 .foregroundColor(palette.mutedText(0.5))
             Spacer()
@@ -113,14 +113,14 @@ struct OrganizerPreviewView: View {
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.text.opacity(0.6))
             } else {
-                Text(copy ? "原文件保留，只新增副本。" : "原文件夹中的文件会移到新路径。")
+                Text(copy ? L("原文件保留，只新增副本。") : L("原文件夹中的文件会移到新路径。"))
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.mutedText(0.45))
             }
             Spacer()
-            Button("取消") { dismiss() }
+            Button(L("取消")) { dismiss() }
                 .disabled(model.fileWorkProgress != nil)
-            Button("开始整理") { confirm() }
+            Button(L("开始整理")) { confirm() }
                 .keyboardShortcut(.defaultAction)
                 .disabled(items.isEmpty || model.fileWorkProgress != nil)
         }
@@ -133,8 +133,8 @@ struct OrganizerPreviewView: View {
     private var options: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                optionLabel("模板")
-                Picker("模板", selection: $template) {
+                optionLabel(L("模板"))
+                Picker(L("模板"), selection: $template) {
                     ForEach(Self.presets) { preset in
                         Text(preset.name).tag(preset.template)
                     }
@@ -150,7 +150,7 @@ struct OrganizerPreviewView: View {
             }
 
             HStack(spacing: 10) {
-                optionLabel("目标文件夹")
+                optionLabel(L("目标文件夹"))
                 Text(destinationRoot.path)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(palette.text.opacity(0.8))
@@ -164,21 +164,21 @@ struct OrganizerPreviewView: View {
                         in: RoundedRectangle(cornerRadius: 6, style: .continuous)
                     )
                     .help(destinationRoot.path)
-                Button("选择…") { chooseRoot() }
+                Button(L("选择…")) { chooseRoot() }
                     .disabled(model.fileWorkProgress != nil)
             }
 
             HStack(spacing: 10) {
-                optionLabel("方式")
-                Picker("方式", selection: $copy) {
-                    Text("移动").tag(false)
-                    Text("复制").tag(true)
+                optionLabel(L("方式"))
+                Picker(L("方式"), selection: $copy) {
+                    Text(L("移动")).tag(false)
+                    Text(L("复制")).tag(true)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 140)
                 .disabled(model.fileWorkProgress != nil)
-                Text("不会覆盖目标位置已有的同名文件。")
+                Text(L("不会覆盖目标位置已有的同名文件。"))
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.mutedText(0.45))
                 Spacer(minLength: 0)
@@ -196,11 +196,11 @@ struct OrganizerPreviewView: View {
     private var summary: some View {
         let conflicts = items.filter(\.conflictResolved).count
         return HStack(spacing: 8) {
-            Text("共 \(items.count) 个文件")
+            Text(Lf("共 %d 个文件", items.count))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundColor(palette.text.opacity(0.75))
             if conflicts > 0 {
-                Text("\(conflicts) 个同名冲突已自动编号，不会覆盖")
+                Text(Lf("%d 个同名冲突已自动编号，不会覆盖", conflicts))
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.warning)
             }
@@ -213,9 +213,9 @@ struct OrganizerPreviewView: View {
     private var previewTable: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Text("原路径")
+                Text(L("原路径"))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text("新路径")
+                Text(L("新路径"))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.system(size: 10.5, weight: .semibold))
@@ -225,7 +225,7 @@ struct OrganizerPreviewView: View {
             .background(palette.raisedFill)
 
             if items.isEmpty {
-                Text("没有需要整理的文件，可能已经在目标位置。")
+                Text(L("没有需要整理的文件，可能已经在目标位置。"))
                     .font(.system(size: 11.5))
                     .foregroundColor(palette.mutedText(0.45))
                     .frame(maxWidth: .infinity)
@@ -261,7 +261,7 @@ struct OrganizerPreviewView: View {
                     Text(item.destination.path)
                         .foregroundColor(palette.text.opacity(0.9))
                     if item.conflictResolved {
-                        Text("同名已避让")
+                        Text(L("同名已避让"))
                             .font(.system(size: 9.5, weight: .medium))
                             .foregroundColor(palette.warning)
                             .padding(.horizontal, 5)
@@ -294,8 +294,8 @@ struct OrganizerPreviewView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "选择"
-        panel.message = "选择整理后的目标文件夹"
+        panel.prompt = L("选择")
+        panel.message = L("选择整理后的目标文件夹")
         let response = panel.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .OK, let url = panel.url else { return }
@@ -305,7 +305,7 @@ struct OrganizerPreviewView: View {
     private func confirm() {
         let plan = items
         guard !plan.isEmpty else {
-            errorMessage = "没有需要整理的文件。"
+            errorMessage = L("没有需要整理的文件。")
             return
         }
 
@@ -339,10 +339,10 @@ struct OrganizerPreviewView: View {
     /// explicit consent before the source copy is removed.
     private func confirmCrossVolumeDelete() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "目标位置在另一个磁盘"
-        alert.informativeText = "会先把文件复制到目标位置，复制完成后再删除源文件。是否继续？"
-        alert.addButton(withTitle: "继续")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L("目标位置在另一个磁盘")
+        alert.informativeText = L("会先把文件复制到目标位置，复制完成后再删除源文件。是否继续？")
+        alert.addButton(withTitle: L("继续"))
+        alert.addButton(withTitle: L("取消"))
         let response = alert.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
         return response == .alertFirstButtonReturn

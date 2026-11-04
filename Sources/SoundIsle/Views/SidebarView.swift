@@ -14,9 +14,9 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
-                    sectionLabel("音乐库")
+                    sectionLabel(L("音乐库"))
                     libraryRow(
-                        title: "全部音乐",
+                        title: L("全部音乐"),
                         icon: Icons.allMusic,
                         count: model.tracks.count,
                         isSelected: selection == .allMusic
@@ -24,7 +24,7 @@ struct SidebarView: View {
                         model.select(.allMusic)
                     }
                     libraryRow(
-                        title: "最近添加",
+                        title: L("最近添加"),
                         icon: Icons.recent,
                         count: model.tracks.count,
                         isSelected: selection == .recentlyAdded
@@ -34,7 +34,7 @@ struct SidebarView: View {
 
                     foldersHeader
                     if model.folders.isEmpty {
-                        emptyRow("尚未导入文件夹")
+                        emptyRow(L("尚未导入文件夹"))
                     } else {
                         ForEach(model.folders, id: \.self) { folder in
                             FolderRow(
@@ -49,14 +49,14 @@ struct SidebarView: View {
                                 onRemove: { confirmRemoveFolder(folder) }
                             )
                             .contextMenu {
-                                Button("重命名文件夹…") { promptRenameFolder(folder) }
+                                Button(L("重命名文件夹…")) { promptRenameFolder(folder) }
                             }
                         }
                     }
 
                     playlistsHeader
                     if model.playlists.playlists.isEmpty {
-                        emptyRow("暂无播放列表")
+                        emptyRow(L("暂无播放列表"))
                     } else {
                         ForEach(model.playlists.playlists) { playlist in
                             playlistRow(playlist)
@@ -84,7 +84,7 @@ struct SidebarView: View {
 
     private var foldersHeader: some View {
         HStack(spacing: 0) {
-            sectionLabel("导入文件夹")
+            sectionLabel(L("导入文件夹"))
             Spacer(minLength: 4)
             Button {
                 model.importFolders(model.openFolders())
@@ -97,7 +97,7 @@ struct SidebarView: View {
             .buttonStyle(.plain)
             .disabled(model.isScanning)
             .opacity(model.isScanning ? 0.45 : 1)
-            .help("导入文件夹")
+            .help(L("导入文件夹帮助"))
             .padding(.trailing, 4)
         }
         .padding(.top, 12)
@@ -105,7 +105,7 @@ struct SidebarView: View {
 
     private var playlistsHeader: some View {
         HStack(spacing: 0) {
-            sectionLabel("播放列表")
+            sectionLabel(L("播放列表分区"))
             Spacer(minLength: 4)
             Button {
                 model.promptCreatePlaylist()
@@ -116,7 +116,7 @@ struct SidebarView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("新建播放列表")
+            .help(L("新建播放列表"))
             .padding(.trailing, 4)
         }
         .padding(.top, 12)
@@ -133,8 +133,8 @@ struct SidebarView: View {
             model.select(.playlist(playlist.id))
         }
         .contextMenu {
-            Button("重命名") { model.promptRenamePlaylist(id: playlist.id) }
-            Button("删除") { model.confirmDeletePlaylist(id: playlist.id) }
+            Button(L("重命名")) { model.promptRenamePlaylist(id: playlist.id) }
+            Button(L("删除")) { model.confirmDeletePlaylist(id: playlist.id) }
         }
         .onDrop(
             of: [UTType.utf8PlainText],
@@ -185,10 +185,10 @@ struct SidebarView: View {
     /// files stay exactly where they are on disk.
     private func confirmRemoveFolder(_ folder: URL) {
         let alert = NSAlert()
-        alert.messageText = "从曲库移除「\(folder.lastPathComponent)」？"
-        alert.informativeText = "只会从曲库移除这个文件夹和其中的歌曲，磁盘上的音频文件不会被删除。"
-        alert.addButton(withTitle: "移除")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = Lf("从曲库移除「%@」？", folder.lastPathComponent)
+        alert.informativeText = L("只会从曲库移除这个文件夹和其中的歌曲，磁盘上的音频文件不会被删除。")
+        alert.addButton(withTitle: L("移除"))
+        alert.addButton(withTitle: L("取消"))
         let response = alert.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .alertFirstButtonReturn else { return }
@@ -199,13 +199,13 @@ struct SidebarView: View {
     /// to overwrite an existing folder. Failures surface in the status banner.
     private func promptRenameFolder(_ folder: URL) {
         let alert = NSAlert()
-        alert.messageText = "重命名文件夹"
-        alert.informativeText = "输入新的文件夹名称，磁盘上的音频文件不会被删除。"
-        alert.addButton(withTitle: "重命名")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = L("重命名文件夹")
+        alert.informativeText = L("输入新的文件夹名称，磁盘上的音频文件不会被删除。")
+        alert.addButton(withTitle: L("重命名"))
+        alert.addButton(withTitle: L("取消"))
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         field.stringValue = folder.lastPathComponent
-        field.placeholderString = "文件夹名称"
+        field.placeholderString = L("文件夹名称")
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
         let response = alert.runModal()
@@ -291,8 +291,8 @@ private struct FolderRow: View {
             Spacer(minLength: 4)
 
             if isHovering {
-                iconButton(Icons.refresh, help: "重新扫描此文件夹", action: onRefresh)
-                iconButton(Icons.symbol("trash", size: 11), help: "移除文件夹（不删除文件）", action: onRemove)
+                iconButton(Icons.refresh, help: L("重新扫描此文件夹"), action: onRefresh)
+                iconButton(Icons.symbol("trash", size: 11), help: L("移除文件夹（不删除文件）"), action: onRemove)
             } else {
                 Text("\(count)")
                     .font(.system(size: 10.5))

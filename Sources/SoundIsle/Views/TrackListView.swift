@@ -108,7 +108,7 @@ struct TrackListView: View {
                         .controlSize(.small)
                         .scaleEffect(0.65)
                         .frame(width: 12, height: 12)
-                    Text("扫描中…")
+                    Text(L("扫描中…"))
                         .font(.system(size: 10.5))
                         .foregroundColor(theme.mutedText(0.5))
                 }
@@ -124,7 +124,7 @@ struct TrackListView: View {
             }
             .buttonStyle(.plain)
             .disabled(model.isScanning || model.folders.isEmpty)
-            .help("重新扫描音乐文件夹")
+            .help(L("重新扫描音乐文件夹"))
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)
@@ -135,15 +135,15 @@ struct TrackListView: View {
         HStack(spacing: TrackColumns.spacing) {
             Color.clear
                 .frame(width: TrackColumns.leading, height: 1)
-            sortButton("标题", .title, alignment: .leading)
+            sortButton(L("标题"), .title, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            sortButton("歌手", .artist, alignment: .leading)
+            sortButton(L("歌手"), .artist, alignment: .leading)
                 .frame(width: TrackColumns.artist, alignment: .leading)
-            sortButton("专辑", .album, alignment: .leading)
+            sortButton(L("专辑"), .album, alignment: .leading)
                 .frame(width: TrackColumns.album, alignment: .leading)
-            sortButton("时长", .duration, alignment: .trailing)
+            sortButton(L("时长"), .duration, alignment: .trailing)
                 .frame(width: TrackColumns.duration, alignment: .trailing)
-            sortButton("添加时间", .dateAdded, alignment: .trailing)
+            sortButton(L("添加时间"), .dateAdded, alignment: .trailing)
                 .frame(width: TrackColumns.added, alignment: .trailing)
         }
         .padding(.horizontal, TrackColumns.rowPadding)
@@ -180,19 +180,19 @@ struct TrackListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("按\(title)排序")
+        .help(Lf("按%@排序", title))
     }
 
     private var title: String {
         switch model.selection {
         case .allMusic:
-            return "全部音乐"
+            return L("全部音乐")
         case .recentlyAdded:
-            return "最近添加"
+            return L("最近添加")
         case .folder(let folder):
             return folder.lastPathComponent
         case .playlist(let id):
-            return model.playlists.playlists.first(where: { $0.id == id })?.name ?? "播放列表"
+            return model.playlists.playlists.first(where: { $0.id == id })?.name ?? L("播放列表")
         }
     }
 
@@ -201,8 +201,10 @@ struct TrackListView: View {
         let seconds = Int(tracks.reduce(0) { $0 + $1.duration })
         let hours = seconds / 3600
         let minutes = (seconds % 3600) / 60
-        let duration = hours > 0 ? "\(hours) 小时 \(minutes) 分" : "\(minutes) 分钟"
-        return "\(tracks.count) 首 · \(duration)"
+        let duration = hours > 0
+            ? Lf("%d 小时 %d 分", hours, minutes)
+            : Lf("%d 分钟", minutes)
+        return Lf("%d 首 · %@", tracks.count, duration)
     }
 
     private func handleReorder(_ providers: [NSItemProvider], onto target: Track) -> Bool {
@@ -257,20 +259,20 @@ struct TrackListView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("关闭")
+                .help(L("关闭"))
             }
             if model.showsFFmpegInstallPrompt {
                 HStack(spacing: 12) {
-                    Button("复制 brew install ffmpeg") {
+                    Button(L("复制 brew install ffmpeg")) {
                         model.copyFFmpegInstallCommand()
                     }
-                    Button("重新检测") {
+                    Button(L("重新检测")) {
                         model.redetectFFmpeg()
                     }
-                    Button("选择 FFmpeg…") {
+                    Button(L("选择 FFmpeg…")) {
                         model.chooseFFmpegPath()
                     }
-                    Text("原生格式仍可正常播放")
+                    Text(L("原生格式仍可正常播放"))
                         .foregroundColor(theme.mutedText(0.45))
                     Spacer(minLength: 0)
                 }
@@ -318,7 +320,7 @@ struct TrackListView: View {
                     model.select(.allMusic)
                 }
             } label: {
-                Text(searching ? "清空搜索" : (model.tracks.isEmpty ? "选择文件夹" : "查看全部音乐"))
+                Text(searching ? L("清空搜索") : (model.tracks.isEmpty ? L("选择文件夹") : L("查看全部音乐")))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(theme.accentLight)
                     .padding(.horizontal, 16)
@@ -343,17 +345,17 @@ struct TrackListView: View {
     }
 
     private func emptyTitle(searching: Bool, playlistEmpty: Bool) -> String {
-        if searching { return "没有匹配的歌曲" }
-        if model.tracks.isEmpty { return "音乐库是空的" }
-        if playlistEmpty { return "这个播放列表还是空的" }
-        return "这个文件夹里没有歌曲"
+        if searching { return L("没有匹配的歌曲") }
+        if model.tracks.isEmpty { return L("音乐库是空的") }
+        if playlistEmpty { return L("这个播放列表还是空的") }
+        return L("这个文件夹里没有歌曲")
     }
 
     private func emptyHint(searching: Bool, playlistEmpty: Bool) -> String {
-        if searching { return "换个关键词，或清空搜索框。" }
-        if model.tracks.isEmpty { return "把音乐文件或文件夹拖到这里，或者选择一个文件夹。" }
-        if playlistEmpty { return "回到「全部音乐」，把歌曲拖进侧栏的播放列表。" }
-        return "换一个文件夹，或回到「全部音乐」。"
+        if searching { return L("换个关键词，或清空搜索框。") }
+        if model.tracks.isEmpty { return L("把音乐文件或文件夹拖到这里，或者选择一个文件夹。") }
+        if playlistEmpty { return L("回到「全部音乐」，把歌曲拖进侧栏的播放列表。") }
+        return L("换一个文件夹，或回到「全部音乐」。")
     }
 }
 
@@ -375,7 +377,7 @@ private struct TrackRow: View {
 
     private static let addedFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = .current
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -395,7 +397,7 @@ private struct TrackRow: View {
                     .truncationMode(.tail)
                     .layoutPriority(1)
                 if track.isMissing {
-                    Text("文件缺失")
+                    Text(L("文件缺失"))
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundColor(theme.warning)
                         .padding(.horizontal, 5)
@@ -527,23 +529,23 @@ private struct TrackContextMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            action("pencil", "编辑标签…") {
+            action("pencil", L("编辑标签…")) {
                 model.beginTagEdit(trackIDs: targetIDs)
             }
-            action("wand.and.stars", "修复乱码标签…") {
+            action("wand.and.stars", L("修复乱码标签…")) {
                 model.promptRepairMojibake(trackIDs: targetIDs)
             }
-            action("folder", "整理文件…") {
+            action("folder", L("整理文件…")) {
                 model.beginOrganize(trackIDs: targetIDs)
             }
-            action("trash", "从音乐库移除") {
+            action("trash", L("从音乐库移除")) {
                 model.removeTracksFromLibrary(targetIDs)
             }
 
             separator
 
             if case .playlist(let playlistID) = model.selection {
-                action("minus.circle", "从播放列表移除") {
+                action("minus.circle", L("从播放列表移除")) {
                     for id in targetIDs {
                         model.removeFromPlaylist(playlistID, trackID: id)
                     }
@@ -566,7 +568,7 @@ private struct TrackContextMenu: View {
 
     private var playlistSection: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text("添加到播放列表")
+            Text(L("添加到播放列表"))
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
                 .foregroundColor(theme.mutedText(0.42))
@@ -575,7 +577,7 @@ private struct TrackContextMenu: View {
                 .padding(.bottom, 3)
 
             if model.playlists.playlists.isEmpty {
-                Text("暂无播放列表")
+                Text(L("暂无播放列表"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.mutedText(0.35))
                     .padding(.horizontal, 8)

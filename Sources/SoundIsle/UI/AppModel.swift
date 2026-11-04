@@ -344,11 +344,11 @@ final class AppModel: ObservableObject {
         do {
             try tagUndoStore.clear()
             tagUndoCount = 0
-            let message = "已清空编辑撤销记录。"
+            let message = L("已清空编辑撤销记录。")
             statusMessage = message
             return message
         } catch {
-            let message = "清空编辑撤销记录失败：\(error.localizedDescription)"
+            let message = Lf("清空编辑撤销记录失败：%@", error.localizedDescription)
             statusMessage = message
             return message
         }
@@ -358,7 +358,7 @@ final class AppModel: ObservableObject {
     func undoLastTagEdit() -> String {
         do {
             guard let entry = try tagUndoStore.undoLast() else {
-                let message = "没有可撤销的标签编辑。"
+                let message = L("没有可撤销的标签编辑。")
                 statusMessage = message
                 return message
             }
@@ -369,12 +369,12 @@ final class AppModel: ObservableObject {
                 artworkChanged: entry.before.artworkBase64 != entry.after.artworkBase64
             )
             refreshFromLibrary()
-            let message = "已撤销对《\(entry.url.lastPathComponent)》的标签编辑。"
+            let message = Lf("已撤销对《%@》的标签编辑。", entry.url.lastPathComponent)
             statusMessage = message
             return message
         } catch {
             tagUndoCount = tagUndoStore.entries.count
-            let message = "撤销失败：\(error.localizedDescription)"
+            let message = Lf("撤销失败：%@", error.localizedDescription)
             statusMessage = message
             return message
         }
@@ -387,21 +387,21 @@ final class AppModel: ObservableObject {
     /// large batch never freezes the window; progress and the index update run
     /// back on the main actor.
     func applyTagEdit(_ edits: TagFields, to tracks: [Track]) async -> String? {
-        guard !tracks.isEmpty else { return "没有选择歌曲。" }
-        guard fileWorkProgress == nil else { return "已有文件操作正在进行。" }
+        guard !tracks.isEmpty else { return L("没有选择歌曲。") }
+        guard fileWorkProgress == nil else { return L("已有文件操作正在进行。") }
 
         let total = tracks.count
-        fileWorkProgress = "正在写入 0/\(total)…"
+        fileWorkProgress = Lf("正在写入 0/%d…", total)
         var changed: [(track: Track, before: TagFields, after: TagFields)] = []
         var failures: [String] = []
         var undoFailures = 0
 
         for (index, track) in tracks.enumerated() {
-            fileWorkProgress = "正在写入 \(index + 1)/\(total)…"
+            fileWorkProgress = Lf("正在写入 %d/%d…", index + 1, total)
             let result = await Task.detached(priority: .userInitiated) { () -> TagEditFileResult in
                 let service = TagService()
                 guard let before = service.read(from: track.url) else {
-                    return TagEditFileResult(changed: nil, failure: "《\(track.title)》无法读取标签")
+                    return TagEditFileResult(changed: nil, failure: Lf("《%@》无法读取标签", track.title))
                 }
                 var after = before
                 if let value = edits.title { after.title = Self.nonEmpty(value) }
@@ -423,7 +423,7 @@ final class AppModel: ObservableObject {
                 } catch {
                     return TagEditFileResult(
                         changed: nil,
-                        failure: "《\(track.title)》：\(error.localizedDescription)"
+                        failure: Lf("《%@》：%@", track.title, error.localizedDescription)
                     )
                 }
                 return TagEditFileResult(
@@ -462,13 +462,20 @@ final class AppModel: ObservableObject {
 
         var notes = failures
         if undoFailures > 0 {
-            notes.append("\(undoFailures) 首的撤销记录保存失败")
+            notes.append(Lf("%d 首的撤销记录保存失败", undoFailures))
         }
         guard !notes.isEmpty else {
-            statusMessage = changed.isEmpty ? "没有需要修改的标签。" : "已更新 \(changed.count) 首歌曲的标签。"
+            statusMessage = changed.isEmpty
+                ? L("没有需要修改的标签。")
+                : Lf("已更新 %d 首歌曲的标签。", changed.count)
             return nil
         }
-        let summary = "已更新 \(changed.count) 首，\(notes.count) 项失败：\(notes.prefix(2).joined(separator: "；"))"
+        let summary = Lf(
+            "已更新 %d 首，%d 项失败：%@",
+            changed.count,
+            notes.count,
+            notes.prefix(2).joined(separator: L("；"))
+        )
         statusMessage = summary
         return summary
     }
@@ -494,15 +501,15 @@ final class AppModel: ObservableObject {
         let ids = Set(trackIDs)
         let targets = visibleTracks.filter { ids.contains($0.id) }
         guard !targets.isEmpty else {
-            statusMessage = "没有选择歌曲。"
+            statusMessage = L("没有选择歌曲。")
             return
         }
         Task {
             guard fileWorkProgress == nil else {
-                statusMessage = "已有文件操作正在进行。"
+                statusMessage = L("已有文件操作正在进行。")
                 return
             }
-            fileWorkProgress = "正在检查乱码 0/\(targets.count)…"
+            fileWorkProgress = Lf("正在检查乱码 0/%d…", targets.count)
             let candidates = await Task.detached(priority: .userInitiated) {
                 () -> [MojibakeRepairCandidate] in
                 let service = TagService()
@@ -511,7 +518,7 @@ final class AppModel: ObservableObject {
                     defer {
                         DispatchQueue.main.async { [weak self] in
                             guard let self, self.fileWorkProgress != nil else { return }
-                            self.fileWorkProgress = "正在检查乱码 \(index + 1)/\(targets.count)…"
+                            self.fileWorkProgress = Lf("正在检查乱码 %d/%d…", index + 1, targets.count)
                         }
                     }
                     let capabilities = TagFormatCapabilities.capabilities(for: track.url)
@@ -523,23 +530,23 @@ final class AppModel: ObservableObject {
                     if let value = before.title,
                        let fixed = MojibakeRepair.repaired(value) {
                         edits.title = fixed
-                        changes.append("标题：\(value) → \(fixed)")
+                        changes.append(Lf("标题：%@ → %@", value, fixed))
                     }
                     if let value = before.artist,
                        let fixed = MojibakeRepair.repaired(value) {
                         edits.artist = fixed
-                        changes.append("歌手：\(value) → \(fixed)")
+                        changes.append(Lf("歌手：%@ → %@", value, fixed))
                     }
                     if let value = before.album,
                        let fixed = MojibakeRepair.repaired(value) {
                         edits.album = fixed
-                        changes.append("专辑：\(value) → \(fixed)")
+                        changes.append(Lf("专辑：%@ → %@", value, fixed))
                     }
                     if capabilities.canWriteAlbumArtist,
                        let value = before.albumArtist,
                        let fixed = MojibakeRepair.repaired(value) {
                         edits.albumArtist = fixed
-                        changes.append("专辑歌手：\(value) → \(fixed)")
+                        changes.append(Lf("专辑歌手：%@ → %@", value, fixed))
                     }
                     guard !changes.isEmpty else { continue }
                     found.append(
@@ -551,12 +558,12 @@ final class AppModel: ObservableObject {
             fileWorkProgress = nil
 
             guard !candidates.isEmpty else {
-                statusMessage = "没有检测到可修复的乱码标签。"
+                statusMessage = L("没有检测到可修复的乱码标签。")
                 return
             }
 
             let alert = NSAlert()
-            alert.messageText = "修复 \(candidates.count) 首歌曲的乱码标签？"
+            alert.messageText = Lf("修复 %d 首歌曲的乱码标签？", candidates.count)
             let preview = candidates.prefix(5).flatMap { candidate in
                 candidate.changes.map { "《\(candidate.track.title)》\($0)" }
             }
@@ -565,9 +572,9 @@ final class AppModel: ObservableObject {
                 detail += "\n…"
             }
             alert.informativeText = detail
-                + "\n\n只写入支持标签编辑的格式，音频内容不会改变；可撤销。"
-            alert.addButton(withTitle: "修复")
-            alert.addButton(withTitle: "取消")
+                + L("\n\n只写入支持标签编辑的格式，音频内容不会改变；可撤销。")
+            alert.addButton(withTitle: L("修复"))
+            alert.addButton(withTitle: L("取消"))
             let response = alert.runModal()
             NSApp.keyWindow?.makeFirstResponder(nil)
             guard response == .alertFirstButtonReturn else { return }
@@ -579,8 +586,13 @@ final class AppModel: ObservableObject {
                 }
             }
             statusMessage = failures.isEmpty
-                ? "已修复 \(candidates.count) 首歌曲的乱码标签。"
-                : "已尝试修复 \(candidates.count) 首，\(failures.count) 项失败：\(failures.prefix(2).joined(separator: "；"))"
+                ? Lf("已修复 %d 首歌曲的乱码标签。", candidates.count)
+                : Lf(
+                    "已尝试修复 %d 首，%d 项失败：%@",
+                    candidates.count,
+                    failures.count,
+                    failures.prefix(2).joined(separator: L("；"))
+                )
         }
     }
 
@@ -624,7 +636,7 @@ final class AppModel: ObservableObject {
         let ids = Set(trackIDs)
         let targets = visibleTracks.filter { ids.contains($0.id) && !$0.isMissing }
         guard !targets.isEmpty else {
-            statusMessage = "没有可整理的歌曲。"
+            statusMessage = L("没有可整理的歌曲。")
             return
         }
         organizerRequest = OrganizerRequest(tracks: targets)
@@ -644,18 +656,18 @@ final class AppModel: ObservableObject {
         copy: Bool,
         destinationRoot: URL
     ) async -> String? {
-        guard !items.isEmpty else { return "没有需要整理的文件。" }
-        guard fileWorkProgress == nil else { return "已有文件操作正在进行。" }
+        guard !items.isEmpty else { return L("没有需要整理的文件。") }
+        guard fileWorkProgress == nil else { return L("已有文件操作正在进行。") }
 
         let total = items.count
-        fileWorkProgress = "正在整理 0/\(total)…"
+        fileWorkProgress = Lf("正在整理 0/%d…", total)
         let organizer = self.organizer
         let result: Result<Void, Error> = await Task.detached(priority: .userInitiated) {
             do {
                 try organizer.apply(items, copy: copy) { completed, count in
                     DispatchQueue.main.async { [weak self] in
                         guard let self, self.fileWorkProgress != nil else { return }
-                        self.fileWorkProgress = "正在整理 \(completed)/\(count)…"
+                        self.fileWorkProgress = Lf("正在整理 %d/%d…", completed, count)
                     }
                 }
                 return .success(())
@@ -672,8 +684,8 @@ final class AppModel: ObservableObject {
             organizeUndoCount = organizer.undo.entries.count
             surfacePersistenceError()
             statusMessage = copy
-                ? "已复制 \(items.count) 个文件。"
-                : "已移动 \(items.count) 个文件，可用「撤销上次整理」恢复。"
+                ? Lf("已复制 %d 个文件。", items.count)
+                : Lf("已移动 %d 个文件，可用「撤销上次整理」恢复。", items.count)
             return nil
         case .failure(let error):
             // A mid-run failure still moved the earlier rows; keep the index
@@ -695,14 +707,14 @@ final class AppModel: ObservableObject {
     @discardableResult
     func undoLastOrganize() -> String {
         guard fileWorkProgress == nil else {
-            let message = "正在整理，请稍后再撤销。"
+            let message = L("正在整理，请稍后再撤销。")
             statusMessage = message
             return message
         }
         let wasCopy = organizer.undo.entries.last?.copy ?? false
         do {
             guard let items = try organizer.undoLast() else {
-                let message = "没有可撤销的整理。"
+                let message = L("没有可撤销的整理。")
                 statusMessage = message
                 return message
             }
@@ -710,11 +722,11 @@ final class AppModel: ObservableObject {
             organizeUndoCount = organizer.undo.entries.count
             let message: String
             if items.isEmpty {
-                message = wasCopy ? "没有可删除的副本。" : "没有可恢复的文件。"
+                message = wasCopy ? L("没有可删除的副本。") : L("没有可恢复的文件。")
             } else if wasCopy {
-                message = "已删除 \(items.count) 个副本，原文件保留。"
+                message = Lf("已删除 %d 个副本，原文件保留。", items.count)
             } else {
-                message = "已恢复 \(items.count) 个文件到原位置。"
+                message = Lf("已恢复 %d 个文件到原位置。", items.count)
             }
             statusMessage = message
             return message
@@ -728,7 +740,7 @@ final class AppModel: ObservableObject {
                case let .undoFailed(restored, _) = organizeError,
                !restored.isEmpty {
                 restoreTrackURLs(for: restored)
-                message += "（已恢复 \(restored.count) 个文件，其余保留在目标位置）"
+                message += Lf("（已恢复 %d 个文件，其余保留在目标位置）", restored.count)
             }
             statusMessage = message
             return message
@@ -785,7 +797,7 @@ final class AppModel: ObservableObject {
         objectWillChange.send()
         surfacePersistenceError()
         if let playlist = playlists.playlists.first(where: { $0.id == playlistID }) {
-            statusMessage = "已添加到「\(playlist.name)」"
+            statusMessage = Lf("已添加到「%@」", playlist.name)
         }
     }
 
@@ -811,8 +823,8 @@ final class AppModel: ObservableObject {
     /// AppKit saves us from macOS 13-only SwiftUI alert text fields.
     func promptCreatePlaylist() {
         guard let name = promptForPlaylistName(
-            title: "新建播放列表",
-            message: "输入播放列表名称。",
+            title: L("新建播放列表"),
+            message: L("输入播放列表名称。"),
             value: ""
         ) else { return }
         let playlist = createPlaylist(named: name)
@@ -822,8 +834,8 @@ final class AppModel: ObservableObject {
     func promptRenamePlaylist(id: UUID) {
         guard let existing = playlists.playlists.first(where: { $0.id == id }),
               let name = promptForPlaylistName(
-                  title: "重命名播放列表",
-                  message: "输入新的名称。",
+                  title: L("重命名播放列表"),
+                  message: L("输入新的名称。"),
                   value: existing.name
               ) else { return }
         renamePlaylist(id: id, to: name)
@@ -832,10 +844,10 @@ final class AppModel: ObservableObject {
     func confirmDeletePlaylist(id: UUID) {
         guard let existing = playlists.playlists.first(where: { $0.id == id }) else { return }
         let alert = NSAlert()
-        alert.messageText = "删除播放列表「\(existing.name)」？"
-        alert.informativeText = "只会删除播放列表，歌曲文件不受影响。"
-        alert.addButton(withTitle: "删除")
-        alert.addButton(withTitle: "取消")
+        alert.messageText = Lf("删除播放列表「%@」？", existing.name)
+        alert.informativeText = L("只会删除播放列表，歌曲文件不受影响。")
+        alert.addButton(withTitle: L("删除"))
+        alert.addButton(withTitle: L("取消"))
         let response = alert.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .alertFirstButtonReturn else { return }
@@ -846,8 +858,8 @@ final class AppModel: ObservableObject {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
-        alert.addButton(withTitle: "确定")
-        alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: L("确定"))
+        alert.addButton(withTitle: L("取消"))
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 230, height: 24))
         field.stringValue = value
         alert.accessoryView = field
@@ -880,8 +892,8 @@ final class AppModel: ObservableObject {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = true
         panel.canCreateDirectories = false
-        panel.prompt = "导入"
-        panel.message = "选择包含音乐的文件夹"
+        panel.prompt = L("导入")
+        panel.message = L("选择包含音乐的文件夹")
         let response = panel.runModal()
         // The search field is the only text field in the window and AppKit may
         // hand it focus when the panel closes, which would swallow space/arrow
@@ -904,7 +916,7 @@ final class AppModel: ObservableObject {
         let unique = Array(Set(folders.map(\.standardizedFileURL)))
         guard !unique.isEmpty else { return }
         guard !isScanning else {
-            statusMessage = "正在扫描音乐库，请稍后再导入。"
+            statusMessage = L("正在扫描音乐库，请稍后再导入。")
             return
         }
         Task { await importFoldersAndScan(unique) }
@@ -956,7 +968,7 @@ final class AppModel: ObservableObject {
             if updated.isMissing {
                 engine.pause()
                 restoredPosition = 0
-                statusMessage = "《\(updated.title)》文件缺失，仍保留在列表中。"
+                statusMessage = Lf("《%@》文件缺失，仍保留在列表中。", updated.title)
             }
         } else {
             currentTrack = nil
@@ -976,7 +988,7 @@ final class AppModel: ObservableObject {
             return
         }
         if track.isMissing {
-            statusMessage = "《\(track.title)》文件缺失，无法播放。"
+            statusMessage = Lf("《%@》文件缺失，无法播放。", track.title)
             return
         }
 
@@ -1015,7 +1027,7 @@ final class AppModel: ObservableObject {
         if let first = visibleTracks.first {
             play(trackID: first.id)
         } else {
-            statusMessage = "音乐库是空的，先导入一个文件夹。"
+            statusMessage = L("音乐库是空的，先导入一个文件夹。")
         }
     }
 
@@ -1024,7 +1036,7 @@ final class AppModel: ObservableObject {
     }
 
     private var startFailureStatus: String {
-        "无法开始播放：\(engine.lastError ?? "未知错误")"
+        Lf("无法开始播放：%@", engine.lastError ?? L("未知错误"))
     }
 
     /// First play after a restore: the engine was deliberately left unloaded
@@ -1033,7 +1045,7 @@ final class AppModel: ObservableObject {
     /// prepared first.
     private func resumeCurrent(_ track: Track) {
         guard !track.isMissing else {
-            statusMessage = "《\(track.title)》文件缺失，无法播放。"
+            statusMessage = Lf("《%@》文件缺失，无法播放。", track.title)
             return
         }
         let position = restoredPosition
@@ -1080,7 +1092,7 @@ final class AppModel: ObservableObject {
         if engine.duration > 0 {
             engine.seek(to: time)
             if let error = engine.lastError {
-                statusMessage = "无法跳转播放位置：\(error)"
+                statusMessage = Lf("无法跳转播放位置：%@", error)
             }
         } else {
             let upper = current.duration > 0 ? current.duration : time
@@ -1095,7 +1107,7 @@ final class AppModel: ObservableObject {
 
     private func playFromQueue(_ id: UUID) -> Bool {
         guard let track = tracks.first(where: { $0.id == id }) else {
-            statusMessage = "曲目不在音乐库中。"
+            statusMessage = L("曲目不在音乐库中。")
             return false
         }
         return startTrack(track)
@@ -1108,7 +1120,7 @@ final class AppModel: ObservableObject {
     @discardableResult
     private func startTrack(_ track: Track, startAt: TimeInterval = 0) -> Bool {
         guard !track.isMissing else {
-            statusMessage = "《\(track.title)》文件缺失，已跳过。"
+            statusMessage = Lf("《%@》文件缺失，已跳过。", track.title)
             return false
         }
 
@@ -1127,7 +1139,7 @@ final class AppModel: ObservableObject {
             // freeze the UI or block formats AVFoundation can play.
             pendingTranscodeTrack = track
             showsFFmpegInstallPrompt = true
-            statusMessage = "需要 FFmpeg 才能播放此格式（《\(track.title)》）。"
+            statusMessage = Lf("需要 FFmpeg 才能播放此格式（《%@》）。", track.title)
             return true
         }
 
@@ -1136,7 +1148,7 @@ final class AppModel: ObservableObject {
         currentTrack = track
         restoredPosition = startAt
         showsFFmpegInstallPrompt = false
-        statusMessage = "正在准备《\(track.title)》…"
+        statusMessage = Lf("正在准备《%@》…", track.title)
         preparingTrackID = track.id
 
         Task { [weak self] in
@@ -1153,9 +1165,9 @@ final class AppModel: ObservableObject {
                 if case TranscodeError.ffmpegMissing = error {
                     self.pendingTranscodeTrack = track
                     self.showsFFmpegInstallPrompt = true
-                    self.statusMessage = "需要 FFmpeg 才能播放此格式（《\(track.title)》）。"
+                    self.statusMessage = Lf("需要 FFmpeg 才能播放此格式（《%@》）。", track.title)
                 } else {
-                    self.statusMessage = "无法准备《\(track.title)》：\(error.localizedDescription)"
+                    self.statusMessage = Lf("无法准备《%@》：%@", track.title, error.localizedDescription)
                 }
             }
         }
@@ -1173,7 +1185,7 @@ final class AppModel: ObservableObject {
         do {
             try engine.load(url: url)
         } catch {
-            statusMessage = "无法播放《\(track.title)》：\(engine.lastError ?? "未知错误")"
+            statusMessage = Lf("无法播放《%@》：%@", track.title, engine.lastError ?? L("未知错误"))
             return false
         }
         if startAt > 0 {
@@ -1205,7 +1217,7 @@ final class AppModel: ObservableObject {
     // MARK: - Transcode cache & FFmpeg
 
     var ffmpegPathText: String {
-        FFmpegLocator.find(customPath: library.settings.ffmpegPath)?.path ?? "未找到"
+        FFmpegLocator.find(customPath: library.settings.ffmpegPath)?.path ?? L("未找到")
     }
 
     var transcodeCacheSizeText: String {
@@ -1228,11 +1240,11 @@ final class AppModel: ObservableObject {
             let size = freed > 0
                 ? ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
                 : "0 MB"
-            message = "已清理转码缓存（\(size)）。"
+            message = Lf("已清理转码缓存（%@）。", size)
         } catch let transcodeError as TranscodeError {
             message = transcodeError.localizedDescription
         } catch {
-            message = "清理转码缓存失败：\(error.localizedDescription)"
+            message = Lf("清理转码缓存失败：%@", error.localizedDescription)
         }
         statusMessage = message
         return message
@@ -1243,13 +1255,13 @@ final class AppModel: ObservableObject {
     func redetectFFmpeg() -> String {
         guard let found = FFmpegLocator.find(customPath: library.settings.ffmpegPath) else {
             showsFFmpegInstallPrompt = true
-            let message = "仍未找到 FFmpeg，请先运行 brew install ffmpeg。"
+            let message = L("仍未找到 FFmpeg，请先运行 brew install ffmpeg。")
             statusMessage = message
             return message
         }
         transcode.updateFFmpeg(found)
         showsFFmpegInstallPrompt = false
-        let message = "已找到 FFmpeg：\(found.path)"
+        let message = Lf("已找到 FFmpeg：%@", found.path)
         statusMessage = message
         prepareLibraryFormats()
         retryPendingTranscode()
@@ -1264,13 +1276,13 @@ final class AppModel: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "选择"
-        panel.message = "选择 ffmpeg 可执行文件"
+        panel.prompt = L("选择")
+        panel.message = L("选择 ffmpeg 可执行文件")
         let response = panel.runModal()
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .OK, let url = panel.url else { return nil }
         guard FileManager.default.isExecutableFile(atPath: url.path) else {
-            let message = "所选文件不可执行，请选择 ffmpeg 可执行文件。"
+            let message = L("所选文件不可执行，请选择 ffmpeg 可执行文件。")
             statusMessage = message
             return message
         }
@@ -1278,7 +1290,7 @@ final class AppModel: ObservableObject {
         library.saveSettings()
         transcode.updateFFmpeg(url)
         showsFFmpegInstallPrompt = false
-        let message = "已使用 FFmpeg：\(url.path)"
+        let message = Lf("已使用 FFmpeg：%@", url.path)
         statusMessage = message
         prepareLibraryFormats()
         retryPendingTranscode()
@@ -1290,7 +1302,7 @@ final class AppModel: ObservableObject {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString("brew install ffmpeg", forType: .string)
-        statusMessage = "已复制安装命令：brew install ffmpeg"
+        statusMessage = L("已复制安装命令：brew install ffmpeg")
     }
 
     private func retryPendingTranscode() {
@@ -1440,7 +1452,7 @@ final class AppModel: ObservableObject {
     /// manual override and show it immediately.
     func promptImportLyrics() {
         guard let track = currentTrack else {
-            statusMessage = "先播放一首歌曲，再导入歌词。"
+            statusMessage = L("先播放一首歌曲，再导入歌词。")
             return
         }
 
@@ -1448,8 +1460,8 @@ final class AppModel: ObservableObject {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "导入"
-        panel.message = "选择 .lrc 或 .txt 歌词文件"
+        panel.prompt = L("导入")
+        panel.message = L("选择 .lrc 或 .txt 歌词文件")
         var types: [UTType] = [.plainText]
         if let lrc = UTType(filenameExtension: "lrc") {
             types.insert(lrc, at: 0)
@@ -1459,7 +1471,7 @@ final class AppModel: ObservableObject {
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard response == .OK, let url = panel.url else { return }
         guard let text = LyricsService.readText(at: url) else {
-            statusMessage = "无法读取歌词文件。"
+            statusMessage = L("无法读取歌词文件。")
             return
         }
 
@@ -1468,14 +1480,14 @@ final class AppModel: ObservableObject {
             forcePlain: url.pathExtension.lowercased() != "lrc"
         )
         guard !parsed.lines.isEmpty else {
-            statusMessage = "歌词文件没有可用内容。"
+            statusMessage = L("歌词文件没有可用内容。")
             return
         }
 
         do {
             try lyricsCache.saveOverride(parsed, for: track.id)
         } catch {
-            statusMessage = "无法保存歌词：\(error.localizedDescription)"
+            statusMessage = Lf("无法保存歌词：%@", error.localizedDescription)
             return
         }
         // The open panel is modal, but a media key can still change tracks.
@@ -1485,7 +1497,7 @@ final class AppModel: ObservableObject {
         }
         lyricsTask?.cancel()
         apply(ResolvedLyrics(lyrics: parsed, origin: .override, sourceURL: url), for: track.id)
-        statusMessage = "已导入歌词"
+        statusMessage = L("已导入歌词")
     }
 
     /// 「恢复自动匹配」: drop the override and resolve the normal priority
@@ -1497,7 +1509,7 @@ final class AppModel: ObservableObject {
         do {
             try lyricsCache.removeOverride(for: track.id)
         } catch {
-            statusMessage = "无法清除歌词覆盖：\(error.localizedDescription)"
+            statusMessage = Lf("无法清除歌词覆盖：%@", error.localizedDescription)
             return
         }
         pendingRestoreTrackID = track.id
@@ -1541,8 +1553,8 @@ final class AppModel: ObservableObject {
             if self.pendingRestoreTrackID == track.id {
                 self.pendingRestoreTrackID = nil
                 self.statusMessage = resolved == nil
-                    ? "已恢复自动匹配，但未找到歌词"
-                    : "已恢复自动匹配"
+                    ? L("已恢复自动匹配，但未找到歌词")
+                    : L("已恢复自动匹配")
             }
         }
     }
@@ -1643,6 +1655,35 @@ final class AppModel: ObservableObject {
         saveSettingsAndNotify()
     }
 
+    /// Persists the language override and writes it where LaunchServices reads
+    /// it (`AppleLanguages` in the app's defaults domain). The running process
+    /// keeps its current localization, so a restart is required and announced.
+    func setAppLanguage(_ language: String) {
+        guard ["system", "zh", "en"].contains(language),
+              library.settings.appLanguage != language else { return }
+        library.settings.appLanguage = language
+        let defaults = UserDefaults.standard
+        switch language {
+        case "zh":
+            defaults.set(["zh-Hans"], forKey: "AppleLanguages")
+        case "en":
+            defaults.set(["en"], forKey: "AppleLanguages")
+        default:
+            defaults.removeObject(forKey: "AppleLanguages")
+        }
+        saveSettingsAndNotify()
+        showLanguageRestartNotice()
+    }
+
+    private func showLanguageRestartNotice() {
+        let alert = NSAlert()
+        alert.messageText = L("语言已更改")
+        alert.informativeText = "重启声屿后生效。\nTakes effect after restarting SoundIsle."
+        alert.addButton(withTitle: L("确定"))
+        alert.runModal()
+        NSApp.keyWindow?.makeFirstResponder(nil)
+    }
+
     func setOnlineLyricsEnabled(_ enabled: Bool) {
         guard library.settings.onlineLyricsEnabled != enabled else { return }
         library.settings.onlineLyricsEnabled = enabled
@@ -1660,7 +1701,7 @@ final class AppModel: ObservableObject {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = (trimmed?.isEmpty ?? true) ? nil : trimmed
         if let normalized, LRCLIBClient.endpointURL(from: normalized) == nil {
-            return "歌词源地址无效，请输入 http 或 https 链接。"
+            return L("歌词源地址无效，请输入 http 或 https 链接。")
         }
         guard library.settings.lyricsEndpoint != normalized else { return nil }
         library.settings.lyricsEndpoint = normalized
@@ -1684,7 +1725,7 @@ final class AppModel: ObservableObject {
         refreshFromLibrary()
         objectWillChange.send()
         surfacePersistenceError()
-        let message = "已移除缺失文件条目。"
+        let message = L("已移除缺失文件条目。")
         statusMessage = message
         return message
     }
@@ -1701,7 +1742,7 @@ final class AppModel: ObservableObject {
         refreshFromLibrary()
         objectWillChange.send()
         surfacePersistenceError()
-        let message = "已移除文件夹：\(url.lastPathComponent)。"
+        let message = Lf("已移除文件夹：%@。", url.lastPathComponent)
         statusMessage = message
         return message
     }
@@ -1725,7 +1766,7 @@ final class AppModel: ObservableObject {
             }
             refreshFromLibrary()
             objectWillChange.send()
-            let message = "已将文件夹重命名为「\(newURL.lastPathComponent)」。"
+            let message = Lf("已将文件夹重命名为「%@」。", newURL.lastPathComponent)
             statusMessage = message
             // A reload failure is allowed to replace the success message.
             if playingTrack != nil, let track = currentTrack {
@@ -1734,7 +1775,7 @@ final class AppModel: ObservableObject {
             surfacePersistenceError()
             return message
         } catch {
-            let message = "重命名失败：\(error.localizedDescription)"
+            let message = Lf("重命名失败：%@", error.localizedDescription)
             statusMessage = message
             return message
         }
@@ -1756,7 +1797,7 @@ final class AppModel: ObservableObject {
                 engine.play()
             }
         } catch {
-            statusMessage = "文件夹已重命名，但无法重新加载《\(track.title)》：\(engine.lastError ?? "未知错误")"
+            statusMessage = Lf("文件夹已重命名，但无法重新加载《%@》：%@", track.title, engine.lastError ?? L("未知错误"))
         }
     }
 
@@ -1771,7 +1812,7 @@ final class AppModel: ObservableObject {
         refreshFromLibrary()
         objectWillChange.send()
         surfacePersistenceError()
-        let message = "已重新定位《\(track.title)》：\(url.lastPathComponent)"
+        let message = Lf("已重新定位《%@》：%@", track.title, url.lastPathComponent)
         statusMessage = message
         return message
     }
@@ -1789,8 +1830,8 @@ final class AppModel: ObservableObject {
         refreshFromLibrary()
         objectWillChange.send()
         surfacePersistenceError()
-        let message = title.map { "已从音乐库移除《\($0)》，文件仍保留在磁盘上。" }
-            ?? "已从音乐库移除 \(ids.count) 首歌曲，文件仍保留在磁盘上。"
+        let message = title.map { Lf("已从音乐库移除《%@》，文件仍保留在磁盘上。", $0) }
+            ?? Lf("已从音乐库移除 %d 首歌曲，文件仍保留在磁盘上。", ids.count)
         statusMessage = message
         return message
     }
@@ -1812,7 +1853,7 @@ final class AppModel: ObservableObject {
     /// silent so a full disk cannot spam the banner every five seconds.
     private func surfacePersistenceError() {
         guard let error = library.lastError else { return }
-        statusMessage = "保存失败：\(error.localizedDescription)"
+        statusMessage = Lf("保存失败：%@", error.localizedDescription)
     }
 
     // MARK: - Persistence
@@ -1847,7 +1888,7 @@ final class AppModel: ObservableObject {
               let track = tracks.first(where: { $0.id == id }) else { return }
         currentTrack = track
         guard !track.isMissing else {
-            statusMessage = "《\(track.title)》文件缺失，仍保留在列表中。"
+            statusMessage = Lf("《%@》文件缺失，仍保留在列表中。", track.title)
             return
         }
         // Deliberately do not load the file yet: the audio engine is created on
