@@ -79,7 +79,7 @@ If `library.json` is corrupt, the app falls back to `.bak`. Playlists and settin
 
 - **TagLib**: GNU LGPL-2.1 or MPL-1.1 (see upstream). Linked statically; source and build script are in the TagLib repository and `Scripts/build-taglib.sh`.
 - **FFmpeg**: the license depends on the build. Common `--enable-gpl` static builds (for example evermeet.cx) are GPL; other builds may be LGPL. FFmpeg is not distributed with this app; install it yourself and follow its license.
-- This project's own source declares no additional license.
+- This project's own source is licensed under the **MIT License**; see `LICENSE`.
 
 ## Known limitations
 

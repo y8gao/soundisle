@@ -72,7 +72,7 @@ bash Scripts/build-app.sh
 
 - **TagLib**：GNU LGPL-2.1 或 MPL-1.1（以 TagLib 上游为准）。本项目以静态库方式链接，源码与构建脚本见 TagLib 官方仓库及 `Scripts/build-taglib.sh`。
 - **FFmpeg**：许可证取决于具体构建。常见的 `--enable-gpl` 静态构建（如 evermeet.cx）为 GPL；其他构建可能为 LGPL。FFmpeg 未随应用分发，由用户自行安装，请按其构建对应的许可证使用。
-- 本项目自身代码未声明额外许可证。
+- 本项目自身代码采用 **MIT License**，见 `LICENSE`。
 
 ## 已知限制
 
