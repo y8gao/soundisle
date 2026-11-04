@@ -109,9 +109,9 @@ public final class OrganizeUndoStore {
         let notice: String?
         switch loaded.source {
         case .backup:
-            notice = "整理撤销记录已从备份恢复。"
+            notice = L("整理撤销记录已从备份恢复。")
         case .corrupt:
-            notice = "整理撤销记录已损坏，无法读取。"
+            notice = L("整理撤销记录已损坏，无法读取。")
         case .primary, .missing:
             notice = nil
         }

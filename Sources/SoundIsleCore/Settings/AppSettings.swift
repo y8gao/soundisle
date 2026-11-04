@@ -21,6 +21,9 @@ public struct AppSettings: Codable, Equatable {
     public var lastTrackID: UUID?
     public var lastPosition: TimeInterval = 0
     public var ffmpegPath: String?
+    /// UI language: "system", "zh" or "en". Applied at launch through
+    /// `AppleLanguages`; changing it needs a restart.
+    public var appLanguage: String = "system"
 
     public init() {}
 
@@ -50,5 +53,6 @@ public struct AppSettings: Codable, Equatable {
         lastTrackID = try container.decodeIfPresent(UUID.self, forKey: .lastTrackID)
         lastPosition = try container.decodeIfPresent(TimeInterval.self, forKey: .lastPosition) ?? 0
         ffmpegPath = try container.decodeIfPresent(String.self, forKey: .ffmpegPath)
+        appLanguage = try container.decodeIfPresent(String.self, forKey: .appLanguage) ?? "system"
     }
 }

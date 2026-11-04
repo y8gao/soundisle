@@ -119,7 +119,7 @@ public final class PlayerEngine: ObservableObject {
         do {
             file = try AVAudioFile(forReading: url)
         } catch {
-            lastError = "无法读取音频文件（\(error.localizedDescription)）"
+            lastError = Lf("无法读取音频文件（%@）", error.localizedDescription)
             throw error
         }
 
@@ -145,7 +145,7 @@ public final class PlayerEngine: ObservableObject {
     public func play() {
         lastError = nil
         guard file != nil else {
-            lastError = "没有加载音频文件"
+            lastError = L("没有加载音频文件")
             return
         }
         let engine = ensureEngine()
@@ -154,7 +154,7 @@ public final class PlayerEngine: ObservableObject {
             do {
                 try engine.start()
             } catch {
-                lastError = "音频引擎启动失败（\(error.localizedDescription)）"
+                lastError = Lf("音频引擎启动失败（%@）", error.localizedDescription)
                 isPlaying = false
                 return
             }
@@ -222,7 +222,7 @@ public final class PlayerEngine: ObservableObject {
                 do {
                     try engine.start()
                 } catch {
-                    lastError = "音频引擎启动失败（\(error.localizedDescription)）"
+                    lastError = Lf("音频引擎启动失败（%@）", error.localizedDescription)
                     isPlaying = false
                     updateTapInstallation()
                     stopPositionTimer()

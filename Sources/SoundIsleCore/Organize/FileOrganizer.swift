@@ -45,15 +45,15 @@ public enum OrganizeError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .sourceMissing(let url):
-            return "源文件不存在：\(url.lastPathComponent)"
+            return Lf("源文件不存在：%@", url.lastPathComponent)
         case .destinationExists(let url):
-            return "目标文件已存在，未覆盖：\(url.lastPathComponent)"
+            return Lf("目标文件已存在，未覆盖：%@", url.lastPathComponent)
         case .restoreConflict(let url):
-            return "原位置已有同名文件，未覆盖：\(url.path)"
+            return Lf("原位置已有同名文件，未覆盖：%@", url.path)
         case .applyFailed(_, let error):
-            return "整理失败：\(error.localizedDescription)"
+            return Lf("整理失败：%@", error.localizedDescription)
         case .undoFailed(_, let error):
-            return "撤销整理失败：\(error.localizedDescription)"
+            return Lf("撤销整理失败：%@", error.localizedDescription)
         }
     }
 }

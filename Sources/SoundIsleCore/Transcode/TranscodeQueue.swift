@@ -9,7 +9,7 @@ extension TranscodeError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .ffmpegMissing:
-            return "未找到 FFmpeg"
+            return L("未找到 FFmpeg")
         case .failed(let message):
             return message
         }
@@ -126,7 +126,7 @@ public final class TranscodeQueue {
         lock.lock()
         defer { lock.unlock() }
         guard activeKey == nil, jobs.isEmpty else {
-            throw TranscodeError.failed("正在准备歌曲，请稍后再清理缓存。")
+            throw TranscodeError.failed(L("正在准备歌曲，请稍后再清理缓存。"))
         }
 
         let manager = FileManager.default
@@ -217,7 +217,7 @@ public final class TranscodeQueue {
         do {
             try manager.createDirectory(at: cacheRoot, withIntermediateDirectories: true)
         } catch {
-            return .failure(TranscodeError.failed("无法创建转码缓存目录：\(error.localizedDescription)"))
+            return .failure(TranscodeError.failed(Lf("无法创建转码缓存目录：%@", error.localizedDescription)))
         }
         try? manager.removeItem(at: temporary)
 
@@ -238,7 +238,7 @@ public final class TranscodeQueue {
         do {
             try process.run()
         } catch {
-            return .failure(TranscodeError.failed("无法启动 FFmpeg：\(error.localizedDescription)"))
+            return .failure(TranscodeError.failed(Lf("无法启动 FFmpeg：%@", error.localizedDescription)))
         }
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
@@ -249,7 +249,7 @@ public final class TranscodeQueue {
             let detail = String(data: errorData, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let suffix = detail.isEmpty ? "" : "：\(String(detail.suffix(300)))"
-            return .failure(TranscodeError.failed("FFmpeg 转码失败（\(process.terminationStatus)）\(suffix)"))
+            return .failure(TranscodeError.failed(Lf("FFmpeg 转码失败（%d）%@", process.terminationStatus, suffix)))
         }
 
         do {
@@ -260,7 +260,7 @@ public final class TranscodeQueue {
             return .success(destination)
         } catch {
             try? manager.removeItem(at: temporary)
-            return .failure(TranscodeError.failed("无法写入转码缓存：\(error.localizedDescription)"))
+            return .failure(TranscodeError.failed(Lf("无法写入转码缓存：%@", error.localizedDescription)))
         }
     }
 

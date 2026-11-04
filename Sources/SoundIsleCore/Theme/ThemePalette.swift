@@ -13,12 +13,12 @@ public enum ThemePreset: String, Codable, CaseIterable, Hashable {
 
     public var displayName: String {
         switch self {
-        case .deepBlue: return "深空蓝"
-        case .morning: return "晨光橙"
-        case .inkAmber: return "墨黑琥珀"
-        case .celadon: return "青瓷"
-        case .berry: return "莓紫"
-        case .seaSalt: return "海盐"
+        case .deepBlue: return L("深空蓝")
+        case .morning: return L("晨光橙")
+        case .inkAmber: return L("墨黑琥珀")
+        case .celadon: return L("青瓷")
+        case .berry: return L("莓紫")
+        case .seaSalt: return L("海盐")
         }
     }
 }
@@ -30,9 +30,9 @@ public enum ThemeMode: String, Codable, CaseIterable, Hashable {
 
     public var displayName: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "浅色"
-        case .dark: return "深色"
+        case .system: return L("跟随系统")
+        case .light: return L("浅色")
+        case .dark: return L("深色")
         }
     }
 }

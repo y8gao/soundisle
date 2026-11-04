@@ -61,7 +61,7 @@ public final class TagService {
     public func write(_ fields: TagFields, to url: URL) throws {
         let data = Self.jsonData(from: fields)
         guard let json = String(data: data, encoding: .utf8) else {
-            throw TagServiceError.writeFailed("标签数据编码失败")
+            throw TagServiceError.writeFailed(L("标签数据编码失败"))
         }
 
         var errorPointer: UnsafeMutablePointer<CChar>?
@@ -71,7 +71,7 @@ public final class TagService {
         }
 
         guard status == 0 else {
-            let message = errorPointer.map { String(cString: $0) } ?? "写入标签失败"
+            let message = errorPointer.map { String(cString: $0) } ?? L("写入标签失败")
             if let errorPointer { soundisle_free(errorPointer) }
             throw TagServiceError.writeFailed(message)
         }
@@ -116,7 +116,7 @@ public struct TagFormatCapabilities: Equatable {
                     canWrite: false,
                     canWriteAlbumArtist: false,
                     canWriteArtwork: false,
-                    limitation: "这个 WAV 文件没有 ID3v2 标签块，无法写入标签。"
+                    limitation: L("这个 WAV 文件没有 ID3v2 标签块，无法写入标签。")
                 )
             }
             return TagFormatCapabilities()
@@ -126,14 +126,14 @@ public struct TagFormatCapabilities: Equatable {
             return TagFormatCapabilities(
                 canWriteAlbumArtist: false,
                 canWriteArtwork: false,
-                limitation: "WMA/ASF 格式不支持写入专辑歌手或封面。"
+                limitation: L("WMA/ASF 格式不支持写入专辑歌手或封面。")
             )
         default:
             return TagFormatCapabilities(
                 canWrite: false,
                 canWriteAlbumArtist: false,
                 canWriteArtwork: false,
-                limitation: "不支持的音频格式，无法写入标签。"
+                limitation: L("不支持的音频格式，无法写入标签。")
             )
         }
     }

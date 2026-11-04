@@ -9,9 +9,9 @@ public enum FolderRenameError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidName:
-            return "文件夹名称不能为空，也不能包含“/”或“:”。"
+            return L("文件夹名称不能为空，也不能包含“/”或“:”。")
         case .destinationExists(let name):
-            return "已存在同名文件夹：\(name)。"
+            return Lf("已存在同名文件夹：%@。", name)
         }
     }
 }
@@ -66,9 +66,9 @@ public final class LibraryStore {
         let settingsResult = store.loadSettingsOutcome()
         settings = settingsResult.value
         recoveryNotice = Self.recoveryNotice([
-            ("曲库", indexResult.source),
-            ("播放列表", playlistsResult.source),
-            ("设置", settingsResult.source),
+            (L("曲库"), indexResult.source),
+            (L("播放列表"), playlistsResult.source),
+            (L("设置"), settingsResult.source),
         ])
         normalizeIndexMojibake()
     }
@@ -111,12 +111,12 @@ public final class LibraryStore {
         let unreadable = sources.filter { $0.source == .unreadable }.map(\.name)
         var parts: [String] = []
         if !backedUp.isEmpty {
-            parts.append("\(backedUp.joined(separator: "/"))已从备份恢复")
+            parts.append(Lf("%@已从备份恢复", backedUp.joined(separator: "/")))
         }
         if !unreadable.isEmpty {
-            parts.append("\(unreadable.joined(separator: "/"))无法读取，已使用默认数据")
+            parts.append(Lf("%@无法读取，已使用默认数据", unreadable.joined(separator: "/")))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "；") + "。"
+        return parts.isEmpty ? nil : parts.joined(separator: L("；")) + L("。")
     }
 
     /// Settings are written through the store that owns them, so `AppModel`

@@ -103,9 +103,9 @@ public final class TagEditUndoStore {
         let notice: String?
         switch loaded.source {
         case .backup:
-            notice = "标签编辑撤销记录已从备份恢复。"
+            notice = L("标签编辑撤销记录已从备份恢复。")
         case .corrupt:
-            notice = "标签编辑撤销记录已损坏，无法读取。"
+            notice = L("标签编辑撤销记录已损坏，无法读取。")
         case .primary, .missing:
             notice = nil
         }
