@@ -99,6 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 window.makeFirstResponder(nil)
                 self.model.clearSearchFocus()
             }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                window.makeFirstResponder(nil)
+                self?.model.clearSearchFocus()
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
                 self?.trimMainMenu()
             }
@@ -112,6 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Mini mode: order the main window out (without closing it) and float the
     /// mini player. Returning to the main window goes through `showMainWindow`.
     func showMiniPlayer() {
+        model.clearSearchFocus()
+        NSApp.windows.filter { isMainWindow($0) }.forEach { $0.makeFirstResponder(nil) }
         model.showMiniPlayer()
     }
 
@@ -127,6 +133,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func windowDidBecomeMain(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, isMainWindow(window) else { return }
         mainWindow = window
+        // Returning from mini mode can restore the search field as first
+        // responder; explicitly resign it so playback shortcuts keep working.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+            window.makeFirstResponder(nil)
+            self?.model.clearSearchFocus()
+        }
         // SwiftUI rebuilds the menu when a window becomes key; trim after it
         // settles. No menu observer here — that caused a rebuild loop.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in

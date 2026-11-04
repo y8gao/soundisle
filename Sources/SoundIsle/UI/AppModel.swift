@@ -1926,6 +1926,7 @@ final class AppModel: ObservableObject {
     /// Used when returning from mini mode: the main window must not hand the
     /// search field the keyboard focus, or space/⌘←/⌘→ stop working.
     func clearSearchFocus() {
+        isSearchFocused = false
         endSearchFocus()
     }
 
