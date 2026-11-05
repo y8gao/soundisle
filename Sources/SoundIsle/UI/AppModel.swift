@@ -96,6 +96,9 @@ final class AppModel: ObservableObject {
     weak var lyricsOverlay: LyricsOverlayWindowController?
     /// Set by `AppDelegate` so preference changes reach the mini panel.
     weak var miniPlayer: MiniPlayerWindowController?
+    /// Mirrors the mini panel's visibility so any control can show the right
+    /// open/close affordance.
+    @Published private(set) var isMiniPlayerVisible = false
     @Published var searchFocusRequest = UUID()
     @Published var endSearchFocusRequest = UUID()
     /// Mirrors the SwiftUI focus state of the search field so the local key
@@ -1367,6 +1370,21 @@ final class AppModel: ObservableObject {
             window.orderOut(nil)
         }
         miniPlayer?.show()
+    }
+
+    /// Closes the mini player without forcing the main window back; the menu
+    /// bar and desktop lyrics remain available.
+    func toggleMiniPlayer() {
+        if isMiniPlayerVisible {
+            miniPlayer?.hide()
+        } else {
+            showMiniPlayer()
+        }
+    }
+
+    func setMiniPlayerVisible(_ visible: Bool) {
+        guard isMiniPlayerVisible != visible else { return }
+        isMiniPlayerVisible = visible
     }
 
     func toggleLyricsVisibility() {

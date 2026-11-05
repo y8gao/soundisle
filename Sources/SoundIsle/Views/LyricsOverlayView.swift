@@ -45,8 +45,10 @@ struct LyricsOverlayView: View {
 
     private var hoverBackground: some View {
         ZStack {
-            MaterialBackdrop(material: palette.isDark ? .hudWindow : .popover)
-            palette.playerTint.opacity(max(0.28, opacity))
+            // A thin behind-window blur keeps the glass readable without
+            // covering the desktop; the slider alone decides the tint.
+            MaterialBackdrop(material: .underWindowBackground)
+            palette.playerTint.opacity(opacity)
         }
         .clipShape(shape)
         .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
@@ -63,6 +65,10 @@ struct LyricsOverlayView: View {
                 content(fontSize: fontSize)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 14)
+                    // Lift the lyrics when the bar appears so the controls
+                    // sit as a footer against the bottom of the glass instead
+                    // of covering the second line.
+                    .padding(.bottom, showsHoverChrome ? 46 : 0)
 
                 if !model.isLyricsLocked {
                     controls
@@ -247,7 +253,7 @@ struct LyricsOverlayView: View {
                 .frame(width: 62)
                 .help(L("悬停背景不透明度"))
 
-                textButton(lineMode == "two" ? L("双行") : L("单行"), help: L("切换单行 / 双行")) {
+                textButton(lineMode == "two" ? L("单行") : L("双行"), help: L("切换单行 / 双行")) {
                     lineMode = lineMode == "two" ? "one" : "two"
                     model.setLyricsLineMode(lineMode)
                 }
@@ -255,8 +261,14 @@ struct LyricsOverlayView: View {
                     outline.toggle()
                     model.setLyricsOutline(outline)
                 }
-                controlButton("rectangle.compress.vertical", help: L("切换到迷你窗口")) {
-                    model.showMiniPlayer()
+                // Icon language: compress = enter mini, expand = back to the
+                // main window (on the mini panel), slashed = close the mini
+                // without bringing the main window back.
+                controlButton(
+                    model.isMiniPlayerVisible ? "rectangle.slash" : "rectangle.compress.vertical",
+                    help: model.isMiniPlayerVisible ? L("关闭迷你窗口") : L("打开迷你窗口")
+                ) {
+                    model.toggleMiniPlayer()
                 }
                 controlButton("xmark", help: L("关闭歌词")) {
                     model.setLyricsVisible(false)

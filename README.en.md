@@ -24,7 +24,7 @@ Switching to the mini player tucks the main window away and leaves a small alway
 ### Desktop lyrics: sing along
 ![Desktop lyrics](docs/screenshots/overlay-en.png)
 
-Lyrics float transparently over the desktop. Drag, resize, or lock them to click through; two lines show the current and next line, following the system light/dark appearance.
+Lyrics float transparently over the desktop. Drag, resize, or lock them to click through; hovering a locked overlay still lets you drag it or click unlock. Two lines show the current and next line, following the system light/dark appearance.
 
 ### Lyrics page
 ![Lyrics page](docs/screenshots/lyrics-en.png)
@@ -42,7 +42,7 @@ Six palettes — celadon, deep blue, morning, ink, berry and sea salt — follow
 
 - **Native and light**: SwiftUI + AppKit + AVFoundation. Idle CPU is effectively zero; playback usually sits around 1–3%, with tens of MB of memory.
 - **Actually background-friendly**: a menu-bar item, a mini player that never steals focus, Space/⌘←/⌘→ in the main window, and system media keys everywhere.
-- **Sing along**: same-name `.lrc` first, then LRCLIB online matching, then manual import. Desktop lyrics are frosted, always-on-top, click-through when locked, and follow system light/dark.
+- **Sing along**: same-name `.lrc` first, then LRCLIB online matching, then manual import. Desktop lyrics are frosted, always-on-top, click-through when locked, and follow system light/dark; hovering a locked overlay still lets you drag or unlock it.
 - **Fix downloaded music**: tag editing, GBK/UTF-8 mojibake repair, batch edits and undo for MP3/FLAC/MP4/APE and more.
 - **Format tolerant**: ape/wma/ogg/opus/dsf and friends are decoded by your local ffmpeg and cached as ALAC in the background.
 - **Pleasant to look at**: six celadon/deep-blue/morning/ink/berry/sea-salt palettes, system light/dark, custom accent and a live spectrum.

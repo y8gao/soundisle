@@ -11,6 +11,7 @@
 "显示歌词" = "Show Lyrics";
 "解锁歌词" = "Unlock Lyrics";
 "锁定歌词" = "Lock Lyrics";
+"拖动歌词" = "Drag lyrics";
 "更换歌词…" = "Change Lyrics…";
 "恢复自动匹配" = "Restore Automatic Match";
 "重试匹配" = "Retry Match";
@@ -134,6 +135,8 @@
 "描边" = "Outline";
 "文字描边" = "Text outline";
 "切换到迷你窗口" = "Switch to Mini Player";
+"打开迷你窗口" = "Open Mini Player";
+"关闭迷你窗口" = "Close Mini Player";
 "关闭歌词" = "Close Lyrics";
 "搜索歌曲、歌手、专辑" = "Search songs, artists, albums";
 "设置" = "Settings";

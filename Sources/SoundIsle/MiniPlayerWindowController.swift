@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 final class MiniPlayerWindowController {
-    static let size = NSSize(width: 520, height: 66)
+    static let size = NSSize(width: 480, height: 66)
 
     private static let originXKey = "miniPlayerOriginX"
     private static let originYKey = "miniPlayerOriginY"
@@ -59,11 +59,13 @@ final class MiniPlayerWindowController {
     func show() {
         guard !panel.isVisible else {
             panel.orderFront(nil)
+            model.setMiniPlayerVisible(true)
             return
         }
         applySettings()
         panel.setFrameOrigin(restoredOrigin())
         panel.orderFront(nil)
+        model.setMiniPlayerVisible(true)
         // `isVisible` only becomes true after ordering front, so the spectrum
         // consumer check must run afterwards.
         refreshSpectrumConsumers()
@@ -71,6 +73,7 @@ final class MiniPlayerWindowController {
 
     func hide() {
         panel.orderOut(nil)
+        model.setMiniPlayerVisible(false)
         refreshSpectrumConsumers()
     }
 

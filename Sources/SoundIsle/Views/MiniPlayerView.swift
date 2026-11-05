@@ -1,8 +1,8 @@
 import SoundIsleCore
 import SwiftUI
 
-/// 520x66 glass capsule: cover, title/artist, live spectrum, position time,
-/// transport buttons, expand, and a 2pt progress line along the bottom.
+/// 480x66 glass capsule: cover, title/artist, live spectrum, position/duration,
+/// transport and lyrics buttons, expand, and a 2pt progress line along the bottom.
 struct MiniPlayerView: View {
     @ObservedObject var model: AppModel
     /// Deliberately not `@ObservedObject`: the parent must not re-render at
@@ -79,7 +79,7 @@ struct MiniPlayerView: View {
     private var content: some View {
         HStack(spacing: 0) {
             cover
-                .padding(.leading, 11)
+                .padding(.leading, 9)
                 .allowsHitTesting(false)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -91,46 +91,56 @@ struct MiniPlayerView: View {
                     .font(.system(size: 10.5))
                     .foregroundColor(palette.mutedText(0.55))
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .frame(width: 126, alignment: .leading)
-            .padding(.leading, 13)
+            .frame(width: 112, alignment: .leading)
+            .padding(.leading, 9)
             .allowsHitTesting(false)
 
             MiniSpectrumView(engine: engine)
-                .padding(.leading, 2)
-                .padding(.trailing, 4)
+                .padding(.horizontal, 4)
                 .allowsHitTesting(false)
 
-            Spacer(minLength: 6)
+            // Keep the spectrum fixed and leave a deliberate gap before the
+            // right-hand transport cluster, which is visually heavier.
+            Spacer(minLength: 8)
 
             MiniPositionView(model: model, engine: engine)
-                .padding(.trailing, 8)
+                .padding(.trailing, 6)
                 .allowsHitTesting(false)
 
-            HStack(spacing: 4) {
-                MiniButton(icon: Icons.symbol("backward.end", size: 13), size: 26, help: L("上一首")) {
+            HStack(spacing: 2) {
+                MiniButton(icon: Icons.symbol("backward.end", size: 13), size: 22, help: L("上一首")) {
                     model.previous()
                 }
                 MiniButton(
                     icon: Icons.symbol(model.isPlaying ? "pause.fill" : "play.fill", size: 14),
-                    size: 34,
+                    size: 30,
                     help: model.isPlaying ? L("暂停") : L("播放"),
                     isPrimary: true
                 ) {
                     model.togglePlayPause()
                 }
-                MiniButton(icon: Icons.symbol("forward.end", size: 13), size: 26, help: L("下一首")) {
+                MiniButton(icon: Icons.symbol("forward.end", size: 13), size: 22, help: L("下一首")) {
                     model.next()
                 }
                 MiniButton(
+                    icon: Icons.lyrics(),
+                    size: 22,
+                    help: model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"),
+                    isActive: model.isLyricsVisible
+                ) {
+                    model.toggleLyricsVisibility()
+                }
+                MiniButton(
                     icon: Icons.symbol("rectangle.expand.vertical", size: 14),
-                    size: 28,
+                    size: 22,
                     help: L("展开主窗口")
                 ) {
                     onExpand()
                 }
             }
-            .padding(.trailing, 14)
+            .padding(.trailing, 12)
         }
     }
 
@@ -139,8 +149,8 @@ struct MiniPlayerView: View {
     private var cover: some View {
         TrackCoverView(
             url: model.currentTrack.flatMap { model.library.artworkURL(for: $0) },
-            size: 44,
-            cornerRadius: 11
+            size: 40,
+            cornerRadius: 10
         )
     }
 
@@ -177,7 +187,7 @@ private struct MiniSpectrumView: View {
             minBarHeight: 3,
             cornerRadius: 1.25
         )
-        .frame(width: 94.5, height: 26)
+        .frame(width: 84, height: 26)
     }
 }
 
@@ -188,6 +198,8 @@ private struct MiniPositionView: View {
     @State private var position: TimeInterval = 0
 
     var body: some View {
+        // The 2pt progress strip along the bottom already shows how much of
+        // the track remains; the numeric total would only eat spectrum width.
         Text(TimeText.string(engine.duration > 0 ? position : model.displayPosition))
             .font(.system(size: 10))
             .monospacedDigit()
@@ -234,6 +246,7 @@ private struct MiniButton: View {
     let size: CGFloat
     let help: String
     var isPrimary = false
+    var isActive = false
     let action: () -> Void
 
     @State private var isHovering = false
@@ -249,7 +262,9 @@ private struct MiniButton: View {
                         .foregroundColor(theme.onAccent)
                 } else {
                     icon
-                        .foregroundColor(theme.text.opacity(isHovering ? 1 : 0.82))
+                        .foregroundColor(
+                            isActive ? theme.accent : theme.text.opacity(isHovering ? 1 : 0.82)
+                        )
                         .background(
                             isHovering ? theme.raisedFill : Color.clear,
                             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
