@@ -19,12 +19,12 @@ Scan folders recursively, read tags, artwork and durations, and sort by title, a
 ### Mini player: for working
 ![Mini player](docs/screenshots/mini-en.png)
 
-Switching to the mini player tucks the main window away and leaves a small always-available strip that never steals focus. It also shows the current lyric line.
+Switching to the mini player tucks the main window away and leaves a small always-available strip that never steals focus. It shows the current lyric line and has a desktop-lyrics toggle.
 
 ### Desktop lyrics: sing along
 ![Desktop lyrics](docs/screenshots/overlay-en.png)
 
-Lyrics float transparently over the desktop. Drag, resize, or lock them to click through; hovering a locked overlay still lets you drag it or click unlock. Two lines show the current and next line, following the system light/dark appearance.
+Lyrics float transparently over the desktop. Drag, resize, or lock them to click through; hovering a locked overlay reveals a small pill for dragging or unlocking. Two lines show the current and next line, following the system light/dark appearance.
 
 ### Lyrics page
 ![Lyrics page](docs/screenshots/lyrics-en.png)
