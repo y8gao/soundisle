@@ -40,9 +40,10 @@ struct TrackListView: View {
             if model.visibleTracks.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(Array(model.visibleTracks.enumerated()), id: \.element.id) { index, track in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(Array(model.visibleTracks.enumerated()), id: \.element.id) { index, track in
                             TrackRow(
                                 track: track,
                                 index: index,
@@ -78,15 +79,35 @@ struct TrackListView: View {
                                     contextMenuTrackID = nil
                                 }
                             }
+                            .id(track.id)
                         }
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 6)
+                        .padding(.bottom, 14)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 6)
-                    .padding(.bottom, 14)
+                    .onAppear { scrollToTargetIfNeeded(proxy) }
+                    .onChange(of: model.listScrollTarget) { _ in
+                        scrollToTargetIfNeeded(proxy)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// The lyrics page is a detail view; returning to the list should show the
+    /// playing track instead of wherever the list was scrolled before.
+    private func scrollToTargetIfNeeded(_ proxy: ScrollViewProxy) {
+        guard let target = model.listScrollTarget else { return }
+        model.listScrollTarget = nil
+        guard model.visibleTracks.contains(where: { $0.id == target }) else { return }
+        // Let the freshly-shown list lay out before asking it to scroll.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .center)
+            }
+        }
     }
 
     private var header: some View {

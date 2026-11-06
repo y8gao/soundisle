@@ -23,28 +23,36 @@ struct MainWindowView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            HStack(spacing: 0) {
-                SidebarView(model: model)
-                    .frame(width: 190)
-                ZStack {
-                    if model.showsLyricsPage {
-                        NowPlayingLyricsView(model: model)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .bottom).combined(with: .opacity),
-                                removal: .opacity
-                            ))
-                    } else {
-                        TrackListView(model: model)
-                            .transition(.opacity)
+        GeometryReader { geometry in
+            let contentHeight = max(0, geometry.size.height - 46 - 84)
+            VStack(spacing: 0) {
+                topBar
+                HStack(alignment: .top, spacing: 0) {
+                    SidebarView(model: model)
+                        .frame(width: 190)
+                    ZStack {
+                        if model.showsLyricsPage {
+                            NowPlayingLyricsView(model: model)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .bottom).combined(with: .opacity),
+                                    removal: .opacity
+                                ))
+                        } else {
+                            TrackListView(model: model)
+                                .transition(.opacity)
+                        }
                     }
+                    // A flexible frame alone is not enough: the lyrics page
+                    // reports a smaller ideal height, and the HStack would
+                    // centre it with a large top gap. Give it the row height.
+                    .frame(maxWidth: .infinity)
+                    .frame(height: contentHeight)
+                    .clipped()
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+                .frame(height: contentHeight)
+                PlayerBarView(model: model)
+                    .frame(height: 84)
             }
-            PlayerBarView(model: model)
-                .frame(height: 84)
         }
         .background(AppBackground())
         .soundIsleTheme(palette)

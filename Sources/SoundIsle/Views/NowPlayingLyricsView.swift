@@ -30,19 +30,27 @@ struct NowPlayingLyricsView: View {
     }
 
     var body: some View {
-        ZStack {
-            background
-            VStack(spacing: 0) {
-                header
-                HStack(alignment: .top, spacing: 30) {
-                    leftColumn
-                        .frame(width: 250)
-                    rightColumn
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                background
+                VStack(spacing: 0) {
+                    header
+                    HStack(alignment: .top, spacing: 30) {
+                        leftColumn
+                            .frame(width: 250)
+                        rightColumn
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    // Pin the two scroll columns to the page height. Their
+                    // content is tall; letting them keep their ideal height
+                    // pushed the header (and the window chrome) out of frame.
+                    .frame(height: max(0, proxy.size.height - 42 - 12))
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 12)
                 }
-                .padding(.horizontal, 28)
-                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

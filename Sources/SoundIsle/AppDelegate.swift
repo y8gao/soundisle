@@ -137,6 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func windowDidBecomeMain(_ notification: Notification) {
         if let window = notification.object as? NSWindow, isMainWindow(window) {
             mainWindow = window
+            // SwiftUI can re-show the ordered-out main window on its own
+            // (Dock click, reopen event). The mini and main are mutually
+            // exclusive, so restore that invariant here too.
+            if miniPlayer?.isVisible == true {
+                miniPlayer?.hide()
+            }
             // Returning from mini mode can restore the search field as first
             // responder; explicitly resign it so playback shortcuts keep working.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in

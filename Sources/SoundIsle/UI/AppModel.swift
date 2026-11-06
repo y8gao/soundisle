@@ -78,6 +78,9 @@ final class AppModel: ObservableObject {
     /// Main content area: track list or the full-window lyrics page. UI state
     /// only; the desktop overlay and playback are unaffected.
     @Published var showsLyricsPage = false
+    /// Set when leaving the lyrics detail; the list scrolls to this track if
+    /// it exists in the section the user lands on.
+    @Published var listScrollTarget: UUID?
     /// Lyrics overlay state. Task 8 renders the overlay; the menu bar already
     /// drives these through the hooks below.
     @Published private(set) var isLyricsVisible = false
@@ -273,6 +276,15 @@ final class AppModel: ObservableObject {
         selection = newSelection
         selectedTrackIDs = []
         selectionAnchorID = nil
+        // The lyrics page is a detail view of the current track. Choosing a
+        // library section from the sidebar is navigation, so return to the
+        // list instead of leaving the sidebar and the page out of sync.
+        if showsLyricsPage {
+            listScrollTarget = currentTrack?.id
+            withAnimation(.easeOut(duration: 0.18)) {
+                showsLyricsPage = false
+            }
+        }
         switch newSelection {
         case .recentlyAdded:
             sort = .dateAdded
@@ -1357,6 +1369,9 @@ final class AppModel: ObservableObject {
     /// Clicks the player-bar cover: spring slide/fade between the list and the
     /// now-playing lyrics page. The transition itself lives on the views.
     func toggleLyricsPage() {
+        if showsLyricsPage {
+            listScrollTarget = currentTrack?.id
+        }
         withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
             showsLyricsPage.toggle()
         }
