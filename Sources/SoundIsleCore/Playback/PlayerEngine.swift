@@ -307,7 +307,7 @@ public final class PlayerEngine: ObservableObject {
 
     private func startPositionTimer() {
         stopPositionTimer()
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self, self.isPlaying else { return }
             self.position = self.currentPlaybackPosition
             self.pausedPosition = self.position

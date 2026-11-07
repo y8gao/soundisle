@@ -52,6 +52,8 @@ struct LyricsOverlayView: View {
         }
         .clipShape(shape)
         .overlay(shape.strokeBorder(palette.hairline, lineWidth: 1))
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
     }
 
     var body: some View {
@@ -117,6 +119,11 @@ struct LyricsOverlayView: View {
                 .minimumScaleFactor(0.5)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
+                // A new identity per line plus no inherited animation stops
+                // SwiftUI from cross-fading the previous line into the new
+                // one (which can look like two overlapping lines).
+                .id(model.currentLyricLineIndex)
+                .transaction { $0.animation = nil }
             } else {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: fontSize * 0.25) {
@@ -218,11 +225,13 @@ struct LyricsOverlayView: View {
                 base.foregroundColor(lyricFill.opacity(emphasis))
             }
             .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+            .compositingGroup()
         } else {
             // Default: no ring. Accent text with a soft, understated shadow.
             base
                 .foregroundColor(lyricFill.opacity(emphasis))
                 .shadow(color: .black.opacity(0.26), radius: 2.5, y: 1)
+                .compositingGroup()
         }
     }
 

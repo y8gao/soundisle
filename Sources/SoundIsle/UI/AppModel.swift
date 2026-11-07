@@ -1466,9 +1466,24 @@ final class AppModel: ObservableObject {
 
     var nextLyricText: String? {
         guard let lyrics, lyrics.isSynced, !lyrics.lines.isEmpty else { return nil }
-        let index = (currentLyricLineIndex ?? 0) + 1
-        guard lyrics.lines.indices.contains(index) else { return nil }
-        return lyrics.lines[index].text
+        let currentIndex = currentLyricLineIndex ?? 0
+        guard lyrics.lines.indices.contains(currentIndex) else { return nil }
+        let current = lyrics.lines[currentIndex].text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Some LRCs repeat a phrase on adjacent timestamps (e.g. 说句心里话
+        // repeats “梦中的她” and “既然来当兵”). Showing the same words again
+        // in the smaller preview line reads like a duplicate/overlap, so skip
+        // identical or empty lines and preview the next distinct one.
+        var index = currentIndex + 1
+        while lyrics.lines.indices.contains(index) {
+            let candidate = lyrics.lines[index].text
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !candidate.isEmpty, candidate != current {
+                return lyrics.lines[index].text
+            }
+            index += 1
+        }
+        return nil
     }
 
     var hasLyricsOverride: Bool {
@@ -1961,7 +1976,9 @@ final class AppModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // The engine publishes at ~2 Hz, which is ample for per-line changes.
+        // The engine publishes at ~10 Hz: a 2 Hz timer made lyric lines lag up
+        // to half a second, so at a boundary the previous line stayed on top
+        // while the next line was already being sung below it.
         engine.$position
             .sink { [weak self] position in
                 Task { @MainActor [weak self] in

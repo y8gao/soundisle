@@ -35,7 +35,10 @@ final class LyricsOverlayWindowController {
         self.panel = panel
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        // Text-only transparent windows can leave a stale window-shadow ghost
+        // of the previous line when the lyric changes quickly. The glass
+        // draws its own soft shadow, so the window shadow is not needed.
+        panel.hasShadow = false
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = true
         panel.becomesKeyOnlyIfNeeded = true
