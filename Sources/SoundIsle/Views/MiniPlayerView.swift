@@ -36,31 +36,20 @@ struct MiniPlayerView: View {
         content
             .frame(width: MiniPlayerWindowController.size.width, height: MiniPlayerWindowController.size.height)
             .background(WindowDragArea())
+            // The frosted capsule is deliberately more opaque than the
+            // desktop lyrics: it is read at a glance while working, so text
+            // clarity wins over seeing the wallpaper through it.
             .background(palette.playerTint.opacity(palette.isDark ? 0.34 : 0.62), in: capsule)
             .background(.ultraThinMaterial, in: capsule)
             .background {
                 RadialGradient(
-                    colors: [palette.accent.opacity(palette.isDark ? 0.22 : 0.14), .clear],
+                    colors: [palette.accent.opacity(palette.isDark ? 0.16 : 0.10), .clear],
                     center: UnitPoint(x: 0.16, y: 0.1),
                     startRadius: 0,
                     endRadius: 220
                 )
                 .clipShape(capsule)
             }
-            .overlay(
-                capsule.strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            palette.accent.opacity(0.55),
-                            palette.hairline,
-                            palette.accentSecondary.opacity(0.38),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
-            )
             .overlay(alignment: .top) {
                 LinearGradient(
                     colors: [Color.white.opacity(palette.isDark ? 0.16 : 0.4), .clear],

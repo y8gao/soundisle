@@ -85,6 +85,10 @@ final class AppModel: ObservableObject {
     /// drives these through the hooks below.
     @Published private(set) var isLyricsVisible = false
     @Published private(set) var isLyricsLocked = false
+    /// True while the locked overlay's pill is showing. The lyrics window is
+    /// click-through then, so it cannot know about hover by itself; the
+    /// controller publishes it so the text can make room for the pill.
+    @Published private(set) var isLyricsLockedBarVisible = false
     /// Lyrics display state for the current track. Starting a lookup for a
     /// different track clears the old lyrics synchronously, so a slow network
     /// response never leaves the previous song's lines on screen.
@@ -1414,6 +1418,11 @@ final class AppModel: ObservableObject {
 
     func toggleLyricsLock() {
         setLyricsLocked(!isLyricsLocked)
+    }
+
+    func setLyricsLockedBarVisible(_ visible: Bool) {
+        guard isLyricsLockedBarVisible != visible else { return }
+        isLyricsLockedBarVisible = visible
     }
 
     func setLyricsLocked(_ locked: Bool) {

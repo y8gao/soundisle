@@ -24,7 +24,7 @@ Switching to the mini player tucks the main window away and leaves a small alway
 ### Desktop lyrics: sing along
 ![Desktop lyrics](docs/screenshots/overlay-en.png)
 
-Lyrics float transparently over the desktop. Drag, resize, or lock them to click through; hovering a locked overlay reveals a small pill for dragging or unlocking. Two lines show the current and next line, following the system light/dark appearance.
+Lyrics float transparently over the desktop. Drag them, resize from the edge, or lock them to click through; hovering reveals a control bar with previous / play-pause / next. A locked overlay keeps those transports in a small pill together with unlock. Two lines show the current and next line, following the system light/dark appearance.
 
 ### Lyrics page
 ![Lyrics page](docs/screenshots/lyrics-en.png)
@@ -42,7 +42,7 @@ Six palettes — celadon, deep blue, morning, ink, berry and sea salt — follow
 
 - **Native and light**: SwiftUI + AppKit + AVFoundation. Idle CPU is effectively zero; playback usually sits around 1–3%, with tens of MB of memory.
 - **Actually background-friendly**: a menu-bar item, a mini player that never steals focus, Space/⌘←/⌘→ in the main window, and system media keys everywhere.
-- **Sing along**: same-name `.lrc` first, then LRCLIB online matching, then manual import. Desktop lyrics are frosted, always-on-top, click-through when locked, and follow system light/dark; hovering a locked overlay still lets you drag or unlock it.
+- **Sing along**: same-name `.lrc` first, then LRCLIB online matching, then manual import. Desktop lyrics are frosted, always-on-top, click-through when locked, and follow system light/dark. Hover for transport controls; a locked overlay still offers previous / play-pause / next and unlock in a small pill.
 - **Fix downloaded music**: tag editing, GBK/UTF-8 mojibake repair, batch edits and undo for MP3/FLAC/MP4/APE and more.
 - **Format tolerant**: ape/wma/ogg/opus/dsf and friends are decoded by your local ffmpeg and cached as ALAC in the background.
 - **Pleasant to look at**: six celadon/deep-blue/morning/ink/berry/sea-salt palettes, system light/dark, custom accent and a live spectrum.
@@ -68,7 +68,9 @@ Six palettes — celadon, deep blue, morning, ink, berry and sea salt — follow
 - Same-name `.lrc` → LRCLIB online match → manual import/override, cached locally.
 - Click the player-bar artwork for a large “cover + synced lyrics” page with the current line highlighted and auto-scrolled.
 - Desktop lyrics are text-only by default; hover shows a frosted background and controls. Locking makes them click-through so they never block your work.
-- Adjustable size (follows window width), one/two lines, opacity, text outline, and a custom LRCLIB-compatible lyrics endpoint.
+- The control bar carries previous / play-pause / next; the locked pill keeps the same transport buttons plus unlock, so playback never needs the main window.
+- Type size follows the window width; drag the window edge or the resize grip to change it. Set it before locking.
+- One/two lines, opacity, text outline, and a custom LRCLIB-compatible lyrics endpoint.
 
 ### Tags and file organization
 

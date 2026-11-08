@@ -7,16 +7,14 @@ import SwiftUI
 struct LyricsOverlayView: View {
     @ObservedObject var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
-    let onResize: (CGFloat) -> Void
 
     @State private var isHovering = false
     @State private var opacity: Double
     @State private var outline: Bool
     @State private var lineMode: String
 
-    init(model: AppModel, onResize: @escaping (CGFloat) -> Void) {
+    init(model: AppModel) {
         self.model = model
-        self.onResize = onResize
         let settings = model.library.settings
         _opacity = State(initialValue: settings.lyricsOpacity)
         _outline = State(initialValue: settings.lyricsOutline)
@@ -39,7 +37,16 @@ struct LyricsOverlayView: View {
 
     /// The desktop overlay is text-only until the user hovers it. Locking
     /// makes the panel click-through, so the glass must never appear then.
+    /// Unlocked: hovering reveals the whole bar. Locked: the pill (a separate
+    /// click-through panel) reports its visibility, so the lyrics still lift
+    /// and scale to make room for it.
     private var showsHoverChrome: Bool {
+        model.isLyricsLocked ? model.isLyricsLockedBarVisible : isHovering
+    }
+
+    /// The glass is only for the unlocked bar. While locked the overlay must
+    /// stay fully transparent, even when the pill is showing.
+    private var showsGlass: Bool {
         isHovering && !model.isLyricsLocked
     }
 
@@ -61,7 +68,7 @@ struct LyricsOverlayView: View {
             let fontSize = LyricsFont.size(forWidth: proxy.size.width)
             ZStack {
                 hoverBackground
-                    .opacity(showsHoverChrome ? 1 : 0)
+                    .opacity(showsGlass ? 1 : 0)
                     .allowsHitTesting(false)
                 WindowDragArea()
                 content(fontSize: fontSize)
@@ -71,6 +78,8 @@ struct LyricsOverlayView: View {
                     // sit as a footer against the bottom of the glass instead
                     // of covering the second line.
                     .padding(.bottom, showsHoverChrome ? 46 : 0)
+                    .scaleEffect(showsHoverChrome ? 0.88 : 1, anchor: .center)
+                    .animation(.easeOut(duration: 0.18), value: showsHoverChrome)
 
                 if !model.isLyricsLocked {
                     controls
@@ -83,6 +92,7 @@ struct LyricsOverlayView: View {
             .onHover { isHovering = $0 }
             .animation(.easeOut(duration: 0.18), value: showsHoverChrome)
         }
+        .animation(.easeOut(duration: 0.18), value: showsGlass)
         .soundIsleTheme(palette)
         .onChange(of: model.library.settings.lyricsOpacity) { opacity = $0 }
         .onChange(of: model.library.settings.lyricsOutline) { outline = $0 }
@@ -250,12 +260,9 @@ struct LyricsOverlayView: View {
                 controlButton("lock.open", help: L("锁定歌词")) {
                     model.setLyricsLocked(true)
                 }
-                controlButton("textformat.size.smaller", help: L("缩小")) {
-                    onResize(-40)
-                }
-                controlButton("textformat.size.larger", help: L("放大")) {
-                    onResize(40)
-                }
+
+                transportControls
+
                 Slider(value: $opacity, in: 0.05...0.9, onEditingChanged: { editing in
                     if !editing { model.setLyricsOpacity(opacity) }
                 })
@@ -292,6 +299,29 @@ struct LyricsOverlayView: View {
         .opacity(showsHoverChrome ? 1 : 0)
         .allowsHitTesting(showsHoverChrome)
         .animation(.easeOut(duration: 0.15), value: showsHoverChrome)
+    }
+
+    /// Previous / play-pause / next, identical in the unlocked bar and the
+    /// locked pill so playback never needs another window.
+    @ViewBuilder
+    private var transportControls: some View {
+        controlButton("backward.end", help: L("上一首")) {
+            model.previous()
+        }
+        Button {
+            model.togglePlayPause()
+        } label: {
+            Icons.symbol(model.isPlaying ? "pause.fill" : "play.fill", size: 11)
+                .foregroundColor(palette.onAccent)
+                .frame(width: 22, height: 22)
+                .background(palette.accent, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help(model.isPlaying ? L("暂停") : L("播放"))
+
+        controlButton("forward.end", help: L("下一首")) {
+            model.next()
+        }
     }
 
     private var resizeGrip: some View {

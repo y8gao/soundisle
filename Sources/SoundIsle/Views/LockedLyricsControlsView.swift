@@ -21,30 +21,63 @@ struct LockedLyricsControlsView: View {
         )
     }
 
+    private func pillButton(
+        _ symbol: String,
+        size: CGFloat = 11,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Icons.symbol(symbol, size: size)
+                .foregroundColor(palette.text.opacity(0.85))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(palette.hairline)
+            .frame(width: 0.5, height: 14)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            Button {
+            // Lock sits first, in the same place as the unlocked bar. The
+            // closed lock shows the current state; clicking unlocks.
+            pillButton("lock.fill", size: 12, help: L("解锁歌词")) {
                 model.setLyricsLocked(false)
+            }
+
+            divider
+
+            // Playback stays reachable while the overlay is click-through.
+            pillButton("backward.end", help: L("上一首")) { model.previous() }
+            Button {
+                model.togglePlayPause()
             } label: {
-                Icons.symbol("lock.open", size: 12)
-                    .foregroundColor(palette.text.opacity(0.85))
-                    .frame(width: 30, height: 28)
-                    .contentShape(Rectangle())
+                Icons.symbol(model.isPlaying ? "pause.fill" : "play.fill", size: 11)
+                    .foregroundColor(palette.onAccent)
+                    .frame(width: 24, height: 24)
+                    .background(palette.accent, in: Circle())
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help(L("解锁歌词"))
+            .help(model.isPlaying ? L("暂停") : L("播放"))
+            .padding(.horizontal, 2)
+            pillButton("forward.end", help: L("下一首")) { model.next() }
 
-            PillDragHandle(onMove: onMove)
-                .frame(width: 30, height: 28)
-                .overlay(
-                    Icons.symbol("arrow.up.and.down.and.arrow.left.and.right", size: 10)
-                        .foregroundColor(palette.text.opacity(0.7))
-                        .allowsHitTesting(false)
-                )
-                .help(L("拖动歌词"))
+            PillHandle(
+                cursor: .openHand,
+                icon: "arrow.up.and.down.and.arrow.left.and.right",
+                help: L("拖动歌词"),
+                onDrag: onMove
+            )
         }
-        .padding(.horizontal, 2)
-        .frame(width: 64, height: 30)
+        .padding(.horizontal, 3)
+        .frame(width: 148, height: 30)
         .background {
             // A blurred, half-transparent capsule keeps the icons legible on
             // black, white and busy backgrounds without becoming a solid bar.
@@ -63,17 +96,40 @@ struct LockedLyricsControlsView: View {
     }
 }
 
-/// Drags the lyrics window itself while the pointer is on the pill. The pill
-/// then follows through the controller, so both move as one unit.
-private struct PillDragHandle: NSViewRepresentable {
-    let onMove: (CGSize) -> Void
+/// A pill-sized drag target. The same shape moves the window or resizes it,
+/// so locked lyrics keep both affordances without the transparent area
+/// catching clicks meant for the app behind.
+private struct PillHandle: View {
+    let cursor: NSCursor
+    let icon: String
+    let help: String
+    let onDrag: (CGSize) -> Void
+
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        PillHandleView(cursor: cursor, onDrag: onDrag)
+            .frame(width: 28, height: 28)
+            .overlay(
+                Icons.symbol(icon, size: 10)
+                    .foregroundColor(theme.text.opacity(0.7))
+                    .allowsHitTesting(false)
+            )
+            .help(help)
+    }
+}
+
+private struct PillHandleView: NSViewRepresentable {
+    let cursor: NSCursor
+    let onDrag: (CGSize) -> Void
 
     final class HandleView: NSView {
         var onMove: ((CGSize) -> Void)?
+        var cursor: NSCursor = .openHand
         private var lastLocation: NSPoint?
 
         override func resetCursorRects() {
-            addCursorRect(bounds, cursor: .openHand)
+            addCursorRect(bounds, cursor: cursor)
         }
 
         override func mouseDown(with event: NSEvent) {
@@ -97,11 +153,13 @@ private struct PillDragHandle: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = HandleView()
-        view.onMove = onMove
+        view.onMove = onDrag
+        view.cursor = cursor
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? HandleView)?.onMove = onMove
+        (nsView as? HandleView)?.onMove = onDrag
+        (nsView as? HandleView)?.cursor = cursor
     }
 }

@@ -11,7 +11,7 @@ final class LyricsOverlayWindowController {
 
     private static let defaultSize = NSSize(width: 560, height: 120)
     private static let frameDefaultsKey = "lyricsOverlayFrame"
-    private static let controlsSize = NSSize(width: 64, height: 30)
+    private static let controlsSize = NSSize(width: 148, height: 30)
 
     private let model: AppModel
     private let panel: NSPanel
@@ -67,16 +67,15 @@ final class LyricsOverlayWindowController {
         controlsPanel.becomesKeyOnlyIfNeeded = true
         controlsPanel.isMovableByWindowBackground = false
 
-        let hosting = NSHostingView(rootView: LyricsOverlayView(model: model) { [weak self] delta in
-            self?.resizeWidth(by: delta)
-        })
+        let hosting = NSHostingView(rootView: LyricsOverlayView(model: model))
         hosting.frame = NSRect(origin: .zero, size: Self.defaultSize)
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
 
-        let controlsHosting = NSHostingView(rootView: LockedLyricsControlsView(model: model) { [weak self] delta in
-            self?.moveLyrics(by: delta)
-        })
+        let controlsHosting = NSHostingView(rootView: LockedLyricsControlsView(
+            model: model,
+            onMove: { [weak self] delta in self?.moveLyrics(by: delta) }
+        ))
         controlsHosting.frame = NSRect(origin: .zero, size: Self.controlsSize)
         controlsPanel.contentView = controlsHosting
 
@@ -194,8 +193,10 @@ final class LyricsOverlayWindowController {
             if controlsPanel.isVisible {
                 controlsPanel.orderOut(nil)
             }
+            model.setLyricsLockedBarVisible(false)
             return
         }
+        model.setLyricsLockedBarVisible(true)
         layoutLockedControls()
         if !controlsPanel.isVisible {
             controlsPanel.orderFrontRegardless()
@@ -225,17 +226,6 @@ final class LyricsOverlayWindowController {
     }
 
     // MARK: - Frame
-
-    /// A−/A+ change the window width; the font always derives from it.
-    func resizeWidth(by delta: CGFloat) {
-        var frame = panel.frame
-        let width = min(max(frame.width + delta, Self.minSize.width), Self.maxSize.width)
-        guard width != frame.width else { return }
-        frame.origin.x -= (width - frame.width) / 2
-        frame.size.width = width
-        panel.setFrame(frame, display: true)
-        saveFrame()
-    }
 
     func applySettings() {
         let settings = model.library.settings
