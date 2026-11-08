@@ -267,10 +267,12 @@ struct NowPlayingLyricsView: View {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(Array(lyrics.lines.enumerated()), id: \.offset) { index, line in
-                        lyricLine(
-                            line.text,
+                        LyricLineRow(
+                            text: line.text,
                             isCurrent: isCurrentLine(index, lyrics: lyrics),
-                            isSynced: lyrics.isSynced
+                            isSynced: lyrics.isSynced,
+                            canSeek: lyrics.isSynced && !line.text.trimmingCharacters(in: .whitespaces).isEmpty,
+                            onSeek: { model.seek(to: line.time) }
                         )
                         .id(index)
                     }
@@ -295,22 +297,6 @@ struct NowPlayingLyricsView: View {
         guard lyrics.isSynced, !lyrics.lines.isEmpty else { return false }
         let current = min(model.currentLyricLineIndex ?? 0, lyrics.lines.count - 1)
         return current == index
-    }
-
-    private func lyricLine(_ text: String, isCurrent: Bool, isSynced: Bool) -> some View {
-        Text(text.isEmpty ? " " : text)
-            .font(.system(size: isCurrent ? 20 : 14, weight: isCurrent ? .semibold : .regular))
-            .foregroundColor(
-                isCurrent
-                    ? theme.accent
-                    : theme.accent.opacity(isSynced ? 0.62 : 0.8)
-            )
-            .shadow(color: theme.accent.opacity(isCurrent ? 0.4 : 0), radius: 8)
-            .lineSpacing(3)
-            .scaleEffect(isCurrent ? 1.02 : 1, anchor: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.easeInOut(duration: 0.24), value: isCurrent)
-            .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
     private func scrollToCurrent(_ proxy: ScrollViewProxy, lyrics: Lyrics, animated: Bool) {
@@ -384,5 +370,70 @@ struct NowPlayingLyricsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 12)
+    }
+}
+
+/// One line in the lyrics page. Synced lines are buttons: clicking seeks the
+/// player to that line's timestamp, the same gesture users expect from a
+/// karaoke player.
+private struct LyricLineRow: View {
+    let text: String
+    let isCurrent: Bool
+    let isSynced: Bool
+    let canSeek: Bool
+    let onSeek: () -> Void
+
+    @Environment(\.theme) private var theme
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: onSeek) {
+            HStack(alignment: .center, spacing: 8) {
+                label
+                // Hovering a synced line shows a play triangle at the trailing
+                // edge; the reserved slot keeps the text from shifting.
+                playIndicator
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(theme.accent.opacity(isHovering && canSeek ? 0.10 : 0))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSeek)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(canSeek ? Lf("跳转到这一句：%@", text) : text)
+        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private var playIndicator: some View {
+        if canSeek {
+            Icons.symbol("play.fill", size: 12)
+                .foregroundColor(theme.accent.opacity(isCurrent ? 0.9 : 0.65))
+                .frame(width: 16, height: 18)
+                .opacity(isHovering ? 1 : 0)
+                .animation(.easeOut(duration: 0.12), value: isHovering)
+        } else {
+            Color.clear.frame(width: 16, height: 18)
+        }
+    }
+
+    private var label: some View {
+        Text(text.isEmpty ? " " : text)
+            .font(.system(size: isCurrent ? 20 : 14, weight: isCurrent ? .semibold : .regular))
+            .foregroundColor(
+                isCurrent
+                    ? theme.accent
+                    : theme.accent.opacity(isSynced ? 0.62 : 0.8)
+            )
+            .shadow(color: theme.accent.opacity(isCurrent ? 0.4 : 0), radius: 8)
+            .lineSpacing(3)
+            .scaleEffect(isCurrent ? 1.02 : 1, anchor: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .animation(.easeInOut(duration: 0.24), value: isCurrent)
     }
 }
