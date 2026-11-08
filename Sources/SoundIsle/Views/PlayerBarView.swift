@@ -182,11 +182,12 @@ struct PlayerBarView: View {
 
             VolumeButton(volume: $model.volume)
 
-            PlayerIconButton(icon: Icons.lyrics(), size: 30) {
+            PlayerIconButton(icon: Icons.lyrics(), size: 30, isActive: model.isLyricsVisible) {
                 model.toggleLyricsVisibility()
             }
             .help(model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"))
             .accessibilityLabel(model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"))
+            .accessibilityAddTraits(model.isLyricsVisible ? .isSelected : [])
 
             PlayerIconButton(icon: Icons.symbol("rectangle.compress.vertical", size: 16), size: 30) {
                 model.showMiniPlayer()
@@ -404,6 +405,7 @@ private struct PlayerIconButton: View {
     @Environment(\.theme) private var theme
     let icon: Image
     let size: CGFloat
+    var isActive = false
     let action: () -> Void
 
     @State private var isHovering = false
@@ -411,12 +413,19 @@ private struct PlayerIconButton: View {
     var body: some View {
         Button(action: action) {
             icon
-                .foregroundColor(isHovering ? theme.accent : theme.accent.opacity(0.82))
-                .frame(width: size, height: size)
-                .background(
-                    isHovering ? theme.raisedFill : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .foregroundColor(
+                    isActive ? theme.accent : (isHovering ? theme.accent : theme.accent.opacity(0.82))
                 )
+                .frame(width: size, height: size)
+                .background {
+                    if isActive {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(theme.accent.opacity(0.18))
+                    } else if isHovering {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(theme.raisedFill)
+                    }
+                }
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

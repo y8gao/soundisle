@@ -62,7 +62,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
 
-        addItem(model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"), action: #selector(toggleLyrics))
+        let lyricsItem = addItem(
+            model.isLyricsVisible ? L("隐藏歌词") : L("显示歌词"),
+            action: #selector(toggleLyrics)
+        )
+        lyricsItem.state = model.isLyricsVisible ? .on : .off
         addItem(model.isLyricsLocked ? L("解锁歌词") : L("锁定歌词"), action: #selector(toggleLyricsLock))
         let importItem = addItem(L("更换歌词…"), action: #selector(importLyrics))
         importItem.isEnabled = model.currentTrack != nil
