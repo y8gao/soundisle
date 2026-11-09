@@ -49,9 +49,10 @@ struct PlayerBarView: View {
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Centred in the window, nudged below the top-edge progress strip.
+            // Let the ZStack centre the transport. A full-size frame here
+            // used to sit above the left/right clusters and swallow their
+            // clicks (cover, volume, lyrics toggle).
             transport
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.top, 6)
         }
         .frame(height: 84)

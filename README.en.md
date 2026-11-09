@@ -29,7 +29,7 @@ Lyrics float transparently over the desktop. Drag them, resize from the edge, or
 ### Lyrics page
 ![Lyrics page](docs/screenshots/lyrics-en.png)
 
-Click the cover in the player bar to switch between the track list and the full lyrics page.
+Click the cover in the player bar to switch between the track list and the full lyrics page. Clicking any synced line seeks to that line; hovering shows a clickable band and a play triangle at the trailing edge.
 
 ### Light and dark themes
 | Light | Dark |
