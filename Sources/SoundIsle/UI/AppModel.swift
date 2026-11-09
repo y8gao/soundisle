@@ -67,7 +67,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var sortAscending = true
     /// Playlists keep their manual order until the user clicks a column header.
     @Published private(set) var playlistSorting = false
-    @Published var statusMessage: String?
+    /// Transient banner text. Any new message schedules its own dismissal so
+    /// notices like "已删除文件夹" do not sit in the list forever. Messages
+    /// that carry actions (the FFmpeg install banner) opt out below.
+    @Published var statusMessage: String? {
+        didSet { scheduleStatusDismissal() }
+    }
+    private var statusDismissTask: Task<Void, Never>?
     /// Live progress for long file work (tag writes / organize). Non-nil also
     /// means a file operation is in flight, so sheets can disable their action.
     @Published private(set) var fileWorkProgress: String?
@@ -2031,9 +2037,24 @@ final class AppModel: ObservableObject {
     }
 
     func dismissStatus() {
+        statusDismissTask?.cancel()
         statusMessage = nil
         showsFFmpegInstallPrompt = false
         pendingTranscodeTrack = nil
+    }
+
+    /// Auto-dismiss plain notices after a few seconds. Actionable banners
+    /// (the FFmpeg install prompt) stay until the user deals with them.
+    private func scheduleStatusDismissal() {
+        statusDismissTask?.cancel()
+        guard let message = statusMessage, !message.isEmpty else { return }
+        guard !showsFFmpegInstallPrompt else { return }
+        statusDismissTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            guard self.statusMessage == message, !self.showsFFmpegInstallPrompt else { return }
+            self.statusMessage = nil
+        }
     }
 
     /// Clicking anywhere outside a text field resigns the search field, so

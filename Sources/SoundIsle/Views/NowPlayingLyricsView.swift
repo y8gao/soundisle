@@ -265,7 +265,7 @@ struct NowPlayingLyricsView: View {
     private func lyricsList(_ lyrics: Lyrics) -> some View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 14) {
+                LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(lyrics.lines.enumerated()), id: \.offset) { index, line in
                         LyricLineRow(
                             text: line.text,
@@ -395,12 +395,20 @@ private struct LyricLineRow: View {
                 playIndicator
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.vertical, 2)
+            // A shared minimum height makes every single-line row the same
+            // size, so the hover band does not grow or shrink with the type
+            // size. Wrapped lines are still allowed to be taller.
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(theme.accent.opacity(isHovering && canSeek ? 0.10 : 0))
+                    .fill(rowBackground)
             )
             .contentShape(Rectangle())
+            // Animate only colour and band, never layout: the type size is
+            // shared by every line, so moving the highlight cannot reflow the
+            // list or make glyphs jump between sizes.
+            .animation(.easeInOut(duration: 0.22), value: isCurrent)
         }
         .buttonStyle(.plain)
         .disabled(!canSeek)
@@ -409,11 +417,20 @@ private struct LyricLineRow: View {
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
+    /// The current line is carried by weight and colour alone; a background
+    /// band here would add a second, permanent highlight to the list. Only the
+    /// transient hover affordance needs a fill.
+    private var rowBackground: Color {
+        isHovering && canSeek ? theme.accent.opacity(0.07) : .clear
+    }
+
     @ViewBuilder
     private var playIndicator: some View {
         if canSeek {
             Icons.symbol("play.fill", size: 12)
-                .foregroundColor(theme.accent.opacity(isCurrent ? 0.9 : 0.65))
+                // Keep the affordance present without out-shouting the
+                // lyric colour: it should read as part of the text row.
+                .foregroundColor(theme.accent.opacity(isCurrent ? 0.55 : 0.40))
                 .frame(width: 16, height: 18)
                 .opacity(isHovering ? 1 : 0)
                 .animation(.easeOut(duration: 0.12), value: isHovering)
@@ -423,17 +440,17 @@ private struct LyricLineRow: View {
     }
 
     private var label: some View {
+        // One type size for every line: the current row is marked by weight,
+        // colour and the accent band instead of growing, which is what made
+        // the line change flash and reflow.
         Text(text.isEmpty ? " " : text)
-            .font(.system(size: isCurrent ? 20 : 14, weight: isCurrent ? .semibold : .regular))
+            .font(.system(size: 16, weight: isCurrent ? .semibold : .regular))
             .foregroundColor(
                 isCurrent
                     ? theme.accent
-                    : theme.accent.opacity(isSynced ? 0.62 : 0.8)
+                    : theme.accent.opacity(isSynced ? 0.55 : 0.78)
             )
-            .shadow(color: theme.accent.opacity(isCurrent ? 0.4 : 0), radius: 8)
             .lineSpacing(3)
-            .scaleEffect(isCurrent ? 1.02 : 1, anchor: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.easeInOut(duration: 0.24), value: isCurrent)
     }
 }
