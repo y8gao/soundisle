@@ -45,6 +45,13 @@ final class AppModel: ObservableObject {
     let organizer: FileOrganizer
     /// Serial background transcoder for formats AVFoundation cannot read.
     let transcode: TranscodeQueue
+    /// Update checks and, in automatic mode, downloading the new build.
+    let updates: UpdateController
+    private var updateStateObserver: AnyCancellable?
+    /// Window-level notice: update results and anything else the app, rather
+    /// than the list, needs to say. Shown on every page.
+    @Published var appNotice: AppNotice?
+    private var appNoticeTask: Task<Void, Never>?
 
     @Published private(set) var queue = PlaybackQueue(trackIDs: [])
     @Published private(set) var currentTrack: Track?
@@ -179,6 +186,25 @@ final class AppModel: ObservableObject {
             )
         )
 
+        self.updates = UpdateController(
+            currentVersion: UpdateController.installedVersion,
+            supportDirectory: directory,
+            modeProvider: { [weak library] in library?.settings.updateMode ?? "notify" },
+            skippedVersion: { [weak library] in library?.settings.skippedUpdateVersion },
+            setSkippedVersion: { [weak library] version in
+                library?.settings.skippedUpdateVersion = version
+                library?.saveSettings()
+            }
+        )
+        // The update state lives in its own object; the settings sheet and the
+        // menu bar watch the model, so its changes are relayed.
+        self.updateStateObserver = updates.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        self.updates.notify = { [weak self] notice in
+            self?.showNotice(notice)
+        }
+
         restorePlaybackState()
         tagUndoCount = tagUndoStore.entries.count
         organizeUndoCount = organizer.undo.entries.count
@@ -204,6 +230,7 @@ final class AppModel: ObservableObject {
     }
 
     deinit {
+        appNoticeTask?.cancel()
         lyricsTask?.cancel()
         customAccentSaveTask?.cancel()
         lyricsOpacitySaveTask?.cancel()
@@ -228,8 +255,50 @@ final class AppModel: ObservableObject {
     func start() {
         guard !didStart else { return }
         didStart = true
+        updates.start()
         guard !library.index.folders.isEmpty else { return }
         Task { await rescan() }
+    }
+
+    // MARK: - Updates
+
+    func showNotice(_ notice: AppNotice) {
+        appNotice = notice
+        appNoticeTask?.cancel()
+        guard notice.duration > 0 else { return }
+        appNoticeTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(notice.duration * 1_000_000_000))
+            guard !Task.isCancelled, let self else { return }
+            guard self.appNotice?.id == notice.id else { return }
+            self.appNotice = nil
+        }
+    }
+
+    func dismissNotice() {
+        appNoticeTask?.cancel()
+        appNotice = nil
+    }
+
+    func setUpdateMode(_ mode: String) {
+        guard library.settings.updateMode != mode else { return }
+        library.settings.updateMode = mode
+        library.saveSettings()
+    }
+
+    /// Check on demand (settings button, app menu) and say what happened in
+    /// the same status banner everything else uses.
+    func checkForUpdates() async {
+        await updates.check(manual: true)
+        switch updates.state {
+        case .upToDate:
+            statusMessage = Lf("已是最新版本 %@", updates.currentVersion.raw)
+        case .available(let release):
+            statusMessage = Lf("发现新版本 %@", release.version.raw)
+        case .failed(let failure):
+            statusMessage = failure.message
+        default:
+            break
+        }
     }
 
     // MARK: - Derived library state

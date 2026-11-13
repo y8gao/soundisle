@@ -47,6 +47,7 @@ Six palettes — celadon, deep blue, morning, ink, berry and sea salt — follow
 - **Format tolerant**: ape/wma/ogg/opus/dsf and friends are decoded by your local ffmpeg and cached as ALAC in the background.
 - **Pleasant to look at**: six celadon/deep-blue/morning/ink/berry/sea-salt palettes, system light/dark, custom accent and a live spectrum.
 - **Bilingual**: follows the system language, with a 中文 / English override in Settings.
+- **Self-updating**: checks for a new version at launch and hourly after (site manifest first, GitHub as the fallback). Choose automatic download-and-install, notify only, or off. A source without a checksum can only notify — never install silently.
 
 ## Features
 
@@ -78,6 +79,14 @@ Six palettes — celadon, deep blue, morning, ink, berry and sea salt — follow
 - Detects GBK/GB18030/Windows-1252 text misdecoded as Latin-1, previews the repair, and keeps an undo history.
 - Organize files with templates such as `Artist/Album/Track Title`; preview first, auto-number name conflicts, never overwrite, undo available.
 - Rescan detects renamed files with identical size + modification date, preserving track IDs and playlists.
+
+### Updates
+
+- One check about 15 seconds after launch, then hourly. No launch agent, no background service.
+- Settings → Updates offers automatic download and install, notify only, or off, plus a manual Check Now (also in the app menu).
+- A new version leaves a pill in the top bar until you install it or choose Skip This Version, shows one notice above the player bar, and appears in the menu-bar menu.
+- Automatic mode only downloads and verifies (sha256); it never interrupts playback. The new build is swapped in when you quit, so the next launch is already updated — or click Restart to Update in the pill to apply it now.
+- A source without a checksum can only notify, never install silently. Without write permission it says so instead of failing quietly.
 
 ### Appearance
 

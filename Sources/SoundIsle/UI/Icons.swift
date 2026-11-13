@@ -64,4 +64,5 @@ enum Icons {
     static var settingsLyrics: Image { symbol("text.alignleft", size: 18) }
     static var settingsAppearance: Image { symbol("paintpalette", size: 18) }
     static var settingsTags: Image { symbol("tag", size: 18) }
+    static var settingsUpdate: Image { symbol("arrow.down.circle", size: 18) }
 }

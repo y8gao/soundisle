@@ -79,6 +79,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model.savePlaybackState()
+        // A downloaded update is swapped in now, while the bundle is closed,
+        // so the next launch is already the new build.
+        model.updates.applyOnQuit()
     }
 
     /// Main window and mini player are mutually exclusive: whichever is

@@ -24,6 +24,12 @@ public struct AppSettings: Codable, Equatable {
     /// UI language: "system", "zh" or "en". Applied at launch through
     /// `AppleLanguages`; changing it needs a restart.
     public var appLanguage: String = "system"
+    /// "automatic" downloads and installs new releases, "notify" only says so,
+    /// "off" never checks.
+    public var updateMode: String = "notify"
+    /// A version the user asked not to be reminded about again. Only that
+    /// exact version is suppressed; the next release is announced as usual.
+    public var skippedUpdateVersion: String?
 
     public init() {}
 
@@ -54,5 +60,7 @@ public struct AppSettings: Codable, Equatable {
         lastPosition = try container.decodeIfPresent(TimeInterval.self, forKey: .lastPosition) ?? 0
         ffmpegPath = try container.decodeIfPresent(String.self, forKey: .ffmpegPath)
         appLanguage = try container.decodeIfPresent(String.self, forKey: .appLanguage) ?? "system"
+        updateMode = try container.decodeIfPresent(String.self, forKey: .updateMode) ?? "notify"
+        skippedUpdateVersion = try container.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)
     }
 }

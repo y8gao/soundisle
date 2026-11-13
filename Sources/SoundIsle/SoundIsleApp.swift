@@ -23,6 +23,11 @@ struct SoundIsleApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(after: .appInfo) {
+                Button(L("检查更新…")) {
+                    Task { await appDelegate.model.checkForUpdates() }
+                }
+            }
             PlaybackCommands(model: appDelegate.model)
             LyricsCommands(model: appDelegate.model)
             FileOrganizerCommands(model: appDelegate.model)

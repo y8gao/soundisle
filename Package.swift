@@ -31,6 +31,7 @@ let package = Package(
         .target(name: "SoundIsleCore", dependencies: ["CTagLib"]),
         .executableTarget(name: "SoundIsle", dependencies: ["SoundIsleCore"]),
         .testTarget(name: "SoundIsleCoreTests", dependencies: ["SoundIsleCore"]),
+        .testTarget(name: "SoundIsleAppTests", dependencies: ["SoundIsle", "SoundIsleCore"]),
     ],
     cxxLanguageStandard: .cxx17
 )

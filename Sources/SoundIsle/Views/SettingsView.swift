@@ -59,6 +59,7 @@ struct SettingsView: View {
                     cacheSection
                     lyricsSection
                     appearanceSection
+                    updateSection
                 }
                 .padding(22)
             }
@@ -552,6 +553,135 @@ struct SettingsView: View {
     }
 
     // MARK: - Pieces
+
+    // MARK: - Updates
+
+    private var updateSection: some View {
+        sectionCard(icon: Icons.settingsUpdate, title: L("更新")) {
+            HStack(spacing: 10) {
+                Text(L("更新方式"))
+                    .font(.system(size: 11.5))
+                    .foregroundColor(palette.text.opacity(0.75))
+                    .frame(width: 92, alignment: .leading)
+                Picker(
+                    "",
+                    selection: Binding(
+                        get: { settings.updateMode },
+                        set: { model.setUpdateMode($0) }
+                    )
+                ) {
+                    ForEach(UpdateController.Mode.allCases, id: \.rawValue) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 320)
+                Spacer(minLength: 0)
+            }
+
+            Text(Lf("当前版本 %@ · 启动后及之后每小时检查一次", model.updates.currentVersion.raw))
+                .font(.system(size: 10.5))
+                .foregroundColor(palette.mutedText(0.45))
+
+            HStack(spacing: 8) {
+                Button(L("检查更新")) {
+                    Task { await model.checkForUpdates() }
+                }
+                .disabled(isUpdating)
+
+                if let release = model.updates.availableRelease {
+                    if release.installable != nil {
+                        Button(L("下载并安装")) {
+                            Task { await model.updates.installAvailable() }
+                        }
+                        .disabled(isUpdating)
+                    }
+                    Button(L("查看更新说明")) {
+                        model.updates.openReleasePage(release)
+                    }
+                }
+
+                if model.updates.readyVersion != nil {
+                    Button(L("现在重启")) {
+                        model.updates.restartToApply()
+                    }
+                }
+            }
+            .controlSize(.small)
+
+            if let status = updateStatus {
+                Text(status.text)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(status.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let skipped = settings.skippedUpdateVersion {
+                HStack(spacing: 6) {
+                    Text(Lf("已忽略 %@，下个版本再提醒", skipped))
+                        .font(.system(size: 10.5))
+                        .foregroundColor(palette.mutedText(0.5))
+                    Button(L("取消忽略")) {
+                        model.updates.clearSkippedVersion()
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 10.5))
+                    .disabled(isUpdating)
+                }
+            }
+
+            // The GitHub fallback carries no checksum, and nothing is ever
+            // installed without one — say so instead of looking broken.
+            if let release = model.updates.availableRelease, release.installable == nil {
+                Text(L("该来源没有提供校验值，已改为提醒，请手动下载安装。"))
+                    .font(.system(size: 10.5))
+                    .foregroundColor(palette.mutedText(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var isUpdating: Bool {
+        switch model.updates.state {
+        case .checking, .downloading: return true
+        default: return false
+        }
+    }
+
+    private var updateStatus: (text: String, color: Color)? {
+        guard let status = UpdatePresentation.status(
+            for: model.updates.state,
+            currentVersion: model.updates.currentVersion.raw
+        ) else { return nil }
+
+        let color: Color
+        switch status.tone {
+        case .neutral: color = palette.mutedText(0.5)
+        case .accent: color = palette.accent
+        case .warning: color = palette.warning
+        }
+
+        let version = status.version ?? ""
+        let text: String
+        switch status.form {
+        case .checking:
+            text = L("正在检查更新…")
+        case .upToDate:
+            text = Lf("已是最新版本 %@", version)
+        case .available:
+            text = Lf("发现新版本 %@", version)
+        case .downloading:
+            text = Lf("正在下载 %@…", version)
+        case .ready:
+            text = Lf("%@ 已就绪，重启后生效", version)
+        case .installed:
+            text = Lf("更新已安装，这是 %@", version)
+        case .failed:
+            text = status.failure?.message ?? L("无法检查更新，请稍后再试")
+        }
+        return (text, color)
+    }
 
     private func sectionCard<Content: View>(
         icon: Image,
