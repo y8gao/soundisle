@@ -48,8 +48,10 @@ struct SidebarView: View {
                                 },
                                 onRemove: { confirmRemoveFolder(folder) }
                             )
-                            .contextMenu {
-                                Button(L("重命名文件夹…")) { promptRenameFolder(folder) }
+                            .themedContextMenu(width: 190) {
+                                ThemedMenuAction(symbol: "pencil", title: L("重命名文件夹…")) {
+                                    promptRenameFolder(folder)
+                                }
                             }
                         }
                     }
@@ -132,9 +134,13 @@ struct SidebarView: View {
         ) {
             model.select(.playlist(playlist.id))
         }
-        .contextMenu {
-            Button(L("重命名")) { model.promptRenamePlaylist(id: playlist.id) }
-            Button(L("删除")) { model.confirmDeletePlaylist(id: playlist.id) }
+        .themedContextMenu(width: 190) {
+            ThemedMenuAction(symbol: "pencil", title: L("重命名")) {
+                model.promptRenamePlaylist(id: playlist.id)
+            }
+            ThemedMenuAction(symbol: "trash", title: L("删除")) {
+                model.confirmDeletePlaylist(id: playlist.id)
+            }
         }
         .onDrop(
             of: [UTType.utf8PlainText],

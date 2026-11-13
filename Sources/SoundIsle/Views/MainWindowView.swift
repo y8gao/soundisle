@@ -55,6 +55,9 @@ struct MainWindowView: View {
             }
         }
         .background(AppBackground())
+        // Inside the theme so the menu panel is themed, above everything so
+        // the list cannot clip it.
+        .overlay(ThemedMenuHost())
         .soundIsleTheme(palette)
         .overlay(dropOverlay)
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in

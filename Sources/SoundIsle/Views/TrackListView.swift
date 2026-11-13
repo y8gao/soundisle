@@ -22,7 +22,6 @@ enum TrackColumns {
 struct TrackListView: View {
     @ObservedObject var model: AppModel
     @Environment(\.theme) private var theme
-    @State private var contextMenuTrackID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,8 +51,7 @@ struct TrackListView: View {
                                 isPlaying: model.isPlaying,
                                 rowStyle: model.library.settings.rowStyle,
                                 artworkURL: model.library.artworkURL(for: track),
-                                onTap: { model.handleTrackClick(track.id) },
-                                onContextMenu: { contextMenuTrackID = track.id }
+                                onTap: { model.handleTrackClick(track.id) }
                             )
                             .onDrag {
                                 NSItemProvider(object: track.id.uuidString as NSString)
@@ -61,23 +59,8 @@ struct TrackListView: View {
                             .onDrop(of: [UTType.utf8PlainText], isTargeted: nil) { providers in
                                 handleReorder(providers, onto: track)
                             }
-                            .popover(
-                                isPresented: Binding(
-                                    get: { contextMenuTrackID == track.id },
-                                    set: { presented in
-                                        if !presented, contextMenuTrackID == track.id {
-                                            contextMenuTrackID = nil
-                                        }
-                                    }
-                                ),
-                                arrowEdge: .bottom
-                            ) {
-                                TrackContextMenu(
-                                    model: model,
-                                    trackID: track.id
-                                ) {
-                                    contextMenuTrackID = nil
-                                }
+                            .themedContextMenu {
+                                TrackContextMenu(model: model, trackID: track.id)
                             }
                             .id(track.id)
                         }
@@ -392,7 +375,6 @@ private struct TrackRow: View {
     let rowStyle: String
     let artworkURL: URL?
     let onTap: () -> Void
-    let onContextMenu: () -> Void
 
     @State private var isHovering = false
 
@@ -462,11 +444,6 @@ private struct TrackRow: View {
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
         .onHover { isHovering = $0 }
-        // Overlay rather than background: the catcher claims only right-click
-        // events, so left-click play, drag and multi-select keep working.
-        .overlay {
-            RightClickCatcher(onRightClick: onContextMenu)
-        }
     }
 
     @ViewBuilder
@@ -496,170 +473,67 @@ private struct TrackRow: View {
     }
 }
 
-// MARK: - Right-click catcher
-
-/// Claims right-clicks without stealing anything else. AppKit asks `hitTest`
-/// while dispatching an event, so returning nil for every non-right-mouse
-/// event leaves SwiftUI's tap and drag gestures untouched.
-private struct RightClickCatcher: NSViewRepresentable {
-    let onRightClick: () -> Void
-
-    func makeNSView(context: Context) -> NSView {
-        let view = CatcherView()
-        view.onRightClick = onRightClick
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        (nsView as? CatcherView)?.onRightClick = onRightClick
-    }
-
-    private final class CatcherView: NSView {
-        var onRightClick: (() -> Void)?
-
-        override func hitTest(_ point: NSPoint) -> NSView? {
-            guard let event = NSApp.currentEvent else { return nil }
-            switch event.type {
-            case .rightMouseDown, .rightMouseUp, .rightMouseDragged:
-                return super.hitTest(point)
-            default:
-                return nil
-            }
-        }
-
-        override func rightMouseDown(with event: NSEvent) {
-            onRightClick?()
-        }
-    }
-}
-
 // MARK: - Track context menu
 
-/// Themed replacement for the system context menu. The popover owns dismissal
-/// (click-away and Esc); `onClose` also lets each action close it before
-/// opening a sheet or mutating the queue.
+/// The rows of the track menu. The panel and its presentation come from
+/// `themedContextMenu`, which every other menu in the window uses too.
 private struct TrackContextMenu: View {
     @ObservedObject var model: AppModel
     let trackID: UUID
-    let onClose: () -> Void
 
     @Environment(\.theme) private var theme
-    @State private var hoveredID: String?
 
     private var targetIDs: [UUID] { model.contextTrackIDs(for: trackID) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            action("pencil", L("编辑标签…")) {
-                model.beginTagEdit(trackIDs: targetIDs)
-            }
-            action("wand.and.stars", L("修复乱码标签…")) {
-                model.promptRepairMojibake(trackIDs: targetIDs)
-            }
-            action("folder", L("整理文件…")) {
-                model.beginOrganize(trackIDs: targetIDs)
-            }
-            action("trash", L("从音乐库移除")) {
-                model.removeTracksFromLibrary(targetIDs)
-            }
-
-            separator
-
-            if case .playlist(let playlistID) = model.selection {
-                action("minus.circle", L("从播放列表移除")) {
-                    for id in targetIDs {
-                        model.removeFromPlaylist(playlistID, trackID: id)
-                    }
-                }
-                separator
-            }
-
-            playlistSection
+        ThemedMenuAction(symbol: "pencil", title: L("编辑标签…")) {
+            model.beginTagEdit(trackIDs: targetIDs)
         }
-        .padding(5)
-        .frame(width: 240)
-        .glassPanel(cornerRadius: 10)
-        .shadow(
-            color: .black.opacity(theme.isDark ? 0.5 : 0.18),
-            radius: 16,
-            y: 6
-        )
-        .onExitCommand(perform: onClose)
+        ThemedMenuAction(symbol: "wand.and.stars", title: L("修复乱码标签…")) {
+            model.promptRepairMojibake(trackIDs: targetIDs)
+        }
+        ThemedMenuAction(symbol: "folder", title: L("整理文件…")) {
+            model.beginOrganize(trackIDs: targetIDs)
+        }
+        ThemedMenuAction(symbol: "trash", title: L("从音乐库移除")) {
+            model.removeTracksFromLibrary(targetIDs)
+        }
+
+        ThemedMenuSeparator()
+
+        if case .playlist(let playlistID) = model.selection {
+            ThemedMenuAction(symbol: "minus.circle", title: L("从播放列表移除")) {
+                for id in targetIDs {
+                    model.removeFromPlaylist(playlistID, trackID: id)
+                }
+            }
+            ThemedMenuSeparator()
+        }
+
+        playlistSection
     }
 
+    @ViewBuilder
     private var playlistSection: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(L("添加到播放列表"))
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundColor(theme.mutedText(0.42))
-                .padding(.horizontal, 8)
-                .padding(.top, 3)
-                .padding(.bottom, 3)
+        ThemedMenuHeader(title: L("添加到播放列表"))
 
-            if model.playlists.playlists.isEmpty {
-                Text(L("暂无播放列表"))
-                    .font(.system(size: 11))
-                    .foregroundColor(theme.mutedText(0.35))
-                    .padding(.horizontal, 8)
-                    .frame(height: 26)
-            } else {
-                ScrollView(showsIndicators: true) {
-                    VStack(spacing: 1) {
-                        ForEach(model.playlists.playlists) { playlist in
-                            action("music.note.list", playlist.name) {
-                                model.addToPlaylist(playlist.id, trackIDs: targetIDs)
-                            }
+        if model.playlists.playlists.isEmpty {
+            Text(L("暂无播放列表"))
+                .font(.system(size: 11))
+                .foregroundColor(theme.mutedText(0.35))
+                .padding(.horizontal, 8)
+                .frame(height: 26)
+        } else {
+            ScrollView(showsIndicators: true) {
+                VStack(spacing: 1) {
+                    ForEach(model.playlists.playlists) { playlist in
+                        ThemedMenuAction(symbol: "music.note.list", title: playlist.name) {
+                            model.addToPlaylist(playlist.id, trackIDs: targetIDs)
                         }
                     }
                 }
-                .frame(maxHeight: min(CGFloat(model.playlists.playlists.count) * 28, 168))
             }
-        }
-    }
-
-    private var separator: some View {
-        Rectangle()
-            .fill(theme.hairline)
-            .frame(height: 1)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
-    }
-
-    private func action(
-        _ symbol: String,
-        _ title: String,
-        run: @escaping () -> Void
-    ) -> some View {
-        let key = "\(symbol)-\(title)"
-        return Button {
-            onClose()
-            run()
-        } label: {
-            HStack(spacing: 8) {
-                Icons.symbol(symbol, size: 11)
-                    .frame(width: 16)
-                Text(title)
-                    .font(.system(size: 12))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .foregroundColor(theme.text.opacity(0.9))
-            .padding(.horizontal, 8)
-            .frame(height: 27)
-            .background(
-                hoveredID == key ? theme.accent.opacity(0.16) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering {
-                hoveredID = key
-            } else if hoveredID == key {
-                hoveredID = nil
-            }
+            .frame(maxHeight: min(CGFloat(model.playlists.playlists.count) * 28, 168))
         }
     }
 }

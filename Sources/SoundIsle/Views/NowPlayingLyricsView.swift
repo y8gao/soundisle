@@ -7,6 +7,7 @@ import SwiftUI
 struct NowPlayingLyricsView: View {
     @ObservedObject var model: AppModel
     @Environment(\.theme) private var theme
+    @State private var isShowingSourceMenu = false
 
     private var track: Track? { model.currentTrack }
 
@@ -187,46 +188,53 @@ struct NowPlayingLyricsView: View {
 
     private static let columnWidth: CGFloat = 250
 
-    /// The source badge doubles as the lyrics-action menu. `Menu` renders its
-    /// label through an AppKit button that drops the SwiftUI styling — the
-    /// fill, the border and the colour all vanished and the text came out
-    /// black — so the pill is drawn normally and an invisible menu fills it.
+    /// The source badge is also the lyrics menu: it is where the lyrics came
+    /// from, so it is where changing them belongs. Clicking it opens the same
+    /// panel that a right-click anywhere over the lyrics opens.
     private func sourceBadge(_ origin: String) -> some View {
-        HStack(spacing: 4) {
-            Icons.symbol("waveform", size: 9)
-            Text(origin)
+        Button {
+            isShowingSourceMenu.toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Icons.symbol("waveform", size: 9)
+                Text(origin)
+            }
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(theme.accentLight)
+            .padding(.horizontal, 8)
+            .frame(height: 20)
+            .background(theme.accent.opacity(0.16), in: Capsule())
+            .overlay(Capsule().strokeBorder(theme.accent.opacity(0.28), lineWidth: 0.5))
+            .contentShape(Capsule())
         }
-        .font(.system(size: 10, weight: .medium))
-        .foregroundColor(theme.accentLight)
-        .padding(.horizontal, 8)
-        .frame(height: 20)
-        .background(theme.accent.opacity(0.16), in: Capsule())
-        .overlay(Capsule().strokeBorder(theme.accent.opacity(0.28), lineWidth: 0.5))
-        .overlay {
-            Menu { lyricsActions } label: { Color.clear }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .accessibilityLabel(Lf("歌词来源：%@", origin))
-        }
+        .buttonStyle(.plain)
         .fixedSize()
+        .popover(isPresented: $isShowingSourceMenu, arrowEdge: .bottom) {
+            ThemedMenuPanel(width: 190) { lyricsMenu }
+        }
         .help(L("歌词来源与操作"))
+        .accessibilityLabel(Lf("歌词来源：%@", origin))
     }
 
-    /// Shared by the source-badge menu and the right-column context menu.
+    /// Shared by the source badge and a right-click over the lyrics.
     @ViewBuilder
-    private var lyricsActions: some View {
-        Button(model.lyrics == nil ? L("导入歌词…") : L("更换歌词…")) {
+    private var lyricsMenu: some View {
+        ThemedMenuAction(
+            symbol: model.lyrics == nil ? "square.and.arrow.down" : "arrow.triangle.2.circlepath",
+            title: model.lyrics == nil ? L("导入歌词…") : L("更换歌词…"),
+            isEnabled: model.currentTrack != nil
+        ) {
             model.promptImportLyrics()
         }
-        .disabled(model.currentTrack == nil)
-
-        Button(L("重试匹配")) {
+        ThemedMenuAction(
+            symbol: "arrow.clockwise",
+            title: L("重试匹配"),
+            isEnabled: model.currentTrack != nil && !model.isResolvingLyrics
+        ) {
             model.retryLyrics()
         }
-        .disabled(model.currentTrack == nil || model.isResolvingLyrics)
-
         if model.hasLyricsOverride {
-            Button(L("恢复自动匹配")) {
+            ThemedMenuAction(symbol: "wand.and.stars", title: L("恢复自动匹配")) {
                 model.restoreAutomaticLyrics()
             }
         }
@@ -243,7 +251,7 @@ struct NowPlayingLyricsView: View {
                 emptyState
             }
         }
-        .contextMenu { lyricsActions }
+        .themedContextMenu(width: 190) { lyricsMenu }
     }
 
     private func lyricsList(_ lyrics: Lyrics) -> some View {

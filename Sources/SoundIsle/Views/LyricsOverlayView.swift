@@ -180,24 +180,27 @@ struct LyricsOverlayView: View {
         }
     }
 
-    /// Right-click menu for the lyrics window. The same entries also live in
-    /// the app menu and the menu bar.
+    /// Right-click menu for the lyrics window. Same entries and order as the
+    /// lyrics page — 更换 / 重试 / 恢复 — but a system menu: this panel is its
+    /// own small floating window, so the themed in-window panel would be
+    /// clipped by it (and the panel is click-through while locked).
     @ViewBuilder
     private var lyricsMenu: some View {
-        Button(L("更换歌词…")) {
+        Button(model.lyrics == nil ? L("导入歌词…") : L("更换歌词…")) {
             model.promptImportLyrics()
         }
         .disabled(model.currentTrack == nil)
-
-        Button(L("恢复自动匹配")) {
-            model.restoreAutomaticLyrics()
-        }
-        .disabled(!model.hasLyricsOverride)
 
         Button(L("重试匹配")) {
             model.retryLyrics()
         }
         .disabled(model.currentTrack == nil || model.isResolvingLyrics)
+
+        if model.hasLyricsOverride {
+            Button(L("恢复自动匹配")) {
+                model.restoreAutomaticLyrics()
+            }
+        }
     }
 
     /// The fill follows the app theme's resolved accent. The optional
