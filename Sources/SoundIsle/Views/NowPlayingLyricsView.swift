@@ -133,7 +133,7 @@ struct NowPlayingLyricsView: View {
 
     private var leftColumn: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 9) {
+            VStack(spacing: 6) {
                 Button {
                     model.toggleLyricsPage()
                 } label: {
@@ -147,119 +147,103 @@ struct NowPlayingLyricsView: View {
                 .help(L("返回歌曲列表"))
                 .accessibilityLabel(L("专辑封面，点击返回歌曲列表"))
 
+                // Every line is exactly one line, so the column never
+                // reflows when a track changes. Long names truncate and slide
+                // open under the pointer instead of wrapping.
                 VStack(spacing: 4) {
-                    Text(track?.title ?? L("未在播放"))
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(theme.accent)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                    Text(subtitle)
-                        .font(.system(size: 11.5))
-                        .foregroundColor(theme.accent.opacity(theme.isDark ? 0.6 : 0.72))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                    ScrollingText(
+                        text: track?.title ?? L("未在播放"),
+                        size: 20,
+                        weight: .semibold,
+                        color: theme.accent,
+                        maxWidth: Self.columnWidth
+                    )
+                    ScrollingText(
+                        text: subtitle,
+                        size: 11.5,
+                        weight: .regular,
+                        color: theme.accent.opacity(theme.isDark ? 0.6 : 0.72),
+                        maxWidth: Self.columnWidth
+                    )
                 }
                 .frame(maxWidth: .infinity)
+                // The artwork needs air under it; the three text lines stay
+                // tight against each other.
+                .padding(.top, 14)
 
-                if let originLabel {
-                    HStack(spacing: 4) {
-                        Icons.symbol("waveform", size: 9)
-                        Text(originLabel)
+                Group {
+                    if let originLabel {
+                        sourceBadge(originLabel)
+                    } else {
+                        Color.clear.frame(height: 20)
                     }
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(theme.accentLight)
-                    .padding(.horizontal, 8)
-                    .frame(height: 20)
-                    .background(theme.accent.opacity(0.16), in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.accent.opacity(0.28), lineWidth: 0.5))
-                    .accessibilityLabel(Lf("歌词来源：%@", originLabel))
                 }
-
-                actionButtons
-                    .padding(.top, 2)
+                .frame(height: 20)
             }
             .padding(.bottom, 4)
         }
-        .frame(width: 250)
+        .frame(width: Self.columnWidth)
     }
 
-    private var actionButtons: some View {
-        VStack(spacing: 6) {
-            lyricAction(
-                model.lyrics == nil ? L("导入歌词…") : L("更换歌词…"),
-                symbol: "square.and.arrow.down",
-                help: L("选择 .lrc 或 .txt 文件"),
-                isPrimary: true,
-                isDisabled: model.currentTrack == nil
-            ) {
-                model.promptImportLyrics()
-            }
+    private static let columnWidth: CGFloat = 250
 
-            lyricAction(
-                L("重试匹配"),
-                symbol: "arrow.clockwise",
-                help: L("重新查找同名歌词或在线匹配"),
-                isDisabled: model.currentTrack == nil || model.isResolvingLyrics
-            ) {
-                model.retryLyrics()
-            }
-
-            if model.hasLyricsOverride {
-                lyricAction(
-                    L("恢复自动匹配"),
-                    symbol: "arrow.uturn.backward",
-                    help: L("删除手动导入的歌词，恢复自动匹配"),
-                    isDisabled: false
-                ) {
-                    model.restoreAutomaticLyrics()
-                }
-            }
+    /// The source badge doubles as the lyrics-action menu. `Menu` renders its
+    /// label through an AppKit button that drops the SwiftUI styling — the
+    /// fill, the border and the colour all vanished and the text came out
+    /// black — so the pill is drawn normally and an invisible menu fills it.
+    private func sourceBadge(_ origin: String) -> some View {
+        HStack(spacing: 4) {
+            Icons.symbol("waveform", size: 9)
+            Text(origin)
         }
+        .font(.system(size: 10, weight: .medium))
+        .foregroundColor(theme.accentLight)
+        .padding(.horizontal, 8)
+        .frame(height: 20)
+        .background(theme.accent.opacity(0.16), in: Capsule())
+        .overlay(Capsule().strokeBorder(theme.accent.opacity(0.28), lineWidth: 0.5))
+        .overlay {
+            Menu { lyricsActions } label: { Color.clear }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .accessibilityLabel(Lf("歌词来源：%@", origin))
+        }
+        .fixedSize()
+        .help(L("歌词来源与操作"))
     }
 
-    private func lyricAction(
-        _ title: String,
-        symbol: String,
-        help: String,
-        isPrimary: Bool = false,
-        isDisabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Icons.symbol(symbol, size: 10)
-                Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
-            }
-            .foregroundColor(isPrimary ? theme.onAccent : theme.accent.opacity(0.9))
-            .frame(maxWidth: .infinity)
-            .frame(height: 28)
-            .background(
-                isPrimary ? theme.accent : theme.raisedFill,
-                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isPrimary ? Color.clear : theme.accent.opacity(0.3), lineWidth: 0.5)
-            )
-            .contentShape(Rectangle())
+    /// Shared by the source-badge menu and the right-column context menu.
+    @ViewBuilder
+    private var lyricsActions: some View {
+        Button(model.lyrics == nil ? L("导入歌词…") : L("更换歌词…")) {
+            model.promptImportLyrics()
         }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .opacity(isDisabled ? 0.45 : 1)
-        .help(help)
-        .accessibilityLabel(title)
+        .disabled(model.currentTrack == nil)
+
+        Button(L("重试匹配")) {
+            model.retryLyrics()
+        }
+        .disabled(model.currentTrack == nil || model.isResolvingLyrics)
+
+        if model.hasLyricsOverride {
+            Button(L("恢复自动匹配")) {
+                model.restoreAutomaticLyrics()
+            }
+        }
     }
 
     // MARK: - Right column
 
     @ViewBuilder
     private var rightColumn: some View {
-        if let lyrics = model.lyrics, !lyrics.lines.isEmpty {
-            lyricsList(lyrics)
-        } else {
-            emptyState
+        Group {
+            if let lyrics = model.lyrics, !lyrics.lines.isEmpty {
+                lyricsList(lyrics)
+            } else {
+                emptyState
+            }
         }
+        .contextMenu { lyricsActions }
     }
 
     private func lyricsList(_ lyrics: Lyrics) -> some View {
@@ -370,6 +354,87 @@ struct NowPlayingLyricsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 12)
+    }
+}
+
+/// One line of text in the fixed-width info column. Wrapping made the block
+/// jump between one and two lines on a track change, and a title that always
+/// scrolls is noise on a page you are meant to read, so the line truncates
+/// and only slides while the pointer is on it: hovering reveals the rest,
+/// leaving with the pointer slides it back.
+private struct ScrollingText: View {
+    let text: String
+    let size: CGFloat
+    let weight: Font.Weight
+    let color: Color
+    let maxWidth: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var offset: CGFloat = 0
+    @State private var isHovering = false
+    @State private var pending: DispatchWorkItem?
+
+    private var overflow: CGFloat {
+        // Measuring the string rather than the laid-out view keeps the
+        // decision out of the layout pass: a GeometryReader here would report
+        // the full width only after the text had already been placed.
+        let font = NSFont.systemFont(
+            ofSize: size,
+            weight: weight == .semibold ? .semibold : .regular
+        )
+        let width = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+        return max(0, width - maxWidth)
+    }
+
+    private var label: Text {
+        Text(text)
+            .font(.system(size: size, weight: weight))
+            .foregroundColor(color)
+    }
+
+    var body: some View {
+        Group {
+            if overflow > 0 && !reduceMotion {
+                label
+                    .lineLimit(1)
+                    .fixedSize()
+                    .offset(x: offset)
+                    .frame(width: maxWidth, alignment: .leading)
+                    .clipped()
+            } else {
+                label
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: maxWidth)
+            }
+        }
+        .onHover(perform: hover)
+        .onChange(of: text) { _ in
+            pending?.cancel()
+            offset = 0
+        }
+    }
+
+    private func hover(_ hovering: Bool) {
+        isHovering = hovering
+        pending?.cancel()
+        guard overflow > 0, !reduceMotion else { return }
+        guard hovering else {
+            withAnimation(.easeOut(duration: 0.22)) { offset = 0 }
+            return
+        }
+        // A pointer that is only passing through should not start a slide.
+        let work = DispatchWorkItem {
+            guard isHovering else { return }
+            // Constant-ish speed so a long name does not rush; the ease in and
+            // out gives the turnaround at each end a moment of rest.
+            let duration = min(6, Double(overflow) / 40 + 0.9)
+            withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: true)) {
+                offset = -overflow
+            }
+        }
+        pending = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
     }
 }
 
