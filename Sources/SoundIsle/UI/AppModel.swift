@@ -287,18 +287,12 @@ final class AppModel: ObservableObject {
 
     /// Check on demand (settings button, app menu) and say what happened in
     /// the same status banner everything else uses.
+    /// Check on demand (settings button, app menu). The result is reported by
+    /// the controller's window notice — `statusMessage` is the list's own
+    /// banner, for library work, and writing the update result there too put
+    /// the same message in two places at once.
     func checkForUpdates() async {
         await updates.check(manual: true)
-        switch updates.state {
-        case .upToDate:
-            statusMessage = Lf("已是最新版本 %@", updates.currentVersion.raw)
-        case .available(let release):
-            statusMessage = Lf("发现新版本 %@", release.version.raw)
-        case .failed(let failure):
-            statusMessage = failure.message
-        default:
-            break
-        }
     }
 
     // MARK: - Derived library state
