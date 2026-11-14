@@ -62,6 +62,11 @@ final class UpdateController: ObservableObject {
     var setSkippedVersion: (String?) -> Void
     var notify: (AppNotice) -> Void = { _ in }
 
+    /// Replacing the bundle has to outlive this process; injected so the
+    /// "swap once" guard can be tested without spawning a shell.
+    var swapScheduler: (URL, URL, Int32, URL, Bool) throws -> Void = UpdateInstaller.swapAfterQuit
+    private(set) var didScheduleSwap = false
+
     private let service: UpdateService
     private let session: URLSession
     private let bundleURL: URL
@@ -264,7 +269,7 @@ final class UpdateController: ObservableObject {
 
     /// Replace the bundle now and reopen.
     func restartToApply() {
-        guard applyStaged(relaunch: true) else { return }
+        guard scheduleSwap(relaunch: true) else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             NSApplication.shared.terminate(nil)
         }
@@ -273,19 +278,25 @@ final class UpdateController: ObservableObject {
     /// Called as the app quits: swap the bundle while it is closed, so the
     /// next launch is already the new build.
     func applyOnQuit() {
-        _ = applyStaged(relaunch: false)
+        _ = scheduleSwap(relaunch: false)
     }
 
-    private func applyStaged(relaunch: Bool) -> Bool {
-        guard let staged = readMarker(stagedMarker) else { return false }
+    /// Schedules the swap at most once. Restarting comes through here and then
+    /// quits, and quitting calls `applyOnQuit` on the way out — without this
+    /// guard two scripts raced over the same bundle, one deleting the other's
+    /// backup halfway through the swap.
+    @discardableResult
+    func scheduleSwap(relaunch: Bool) -> Bool {
+        guard !didScheduleSwap, let staged = readMarker(stagedMarker) else { return false }
         do {
-            try UpdateInstaller.swapAfterQuit(
-                newApp: staged.url,
-                target: bundleURL,
-                pid: ProcessInfo.processInfo.processIdentifier,
-                staging: updatesDirectory,
-                relaunch: relaunch
+            try swapScheduler(
+                staged.url,
+                bundleURL,
+                ProcessInfo.processInfo.processIdentifier,
+                updatesDirectory,
+                relaunch
             )
+            didScheduleSwap = true
             writeMarker(at: appliedMarker, version: staged.version)
             return true
         } catch {

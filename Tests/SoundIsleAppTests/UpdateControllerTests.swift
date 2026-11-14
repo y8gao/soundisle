@@ -287,3 +287,74 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertTrue(notices.isEmpty)
     }
 }
+
+/// Applying a staged update. The restart path and the quit path reach the
+/// same script, and a second one racing the first left the bundle in whichever
+/// state won — these pin down that only one swap is ever scheduled.
+@MainActor
+final class UpdateApplyTests: XCTestCase {
+    private var support: URL!
+    private var controller: UpdateController!
+    private var swaps: [Bool] = []
+
+    override func setUpWithError() throws {
+        support = FileManager.default.temporaryDirectory
+            .appendingPathComponent("update-apply-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        swaps = []
+
+        // A staged marker plus the bundle it points at, as `downloadAndStage`
+        // would leave them.
+        let app = support.appendingPathComponent("updates/9.9.9/声屿.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        let marker = ["version": "9.9.9", "path": app.path]
+        try JSONSerialization.data(withJSONObject: marker)
+            .write(to: support.appendingPathComponent("updates/staged.json"))
+
+        controller = UpdateController(
+            currentVersion: AppVersion("0.7.2")!,
+            supportDirectory: support,
+            modeProvider: { "notify" },
+            skippedVersion: { nil },
+            setSkippedVersion: { _ in },
+            bundleURL: support.appendingPathComponent("installed/声屿.app")
+        )
+        controller.swapScheduler = { [unowned self] _, _, _, _, relaunch in
+            self.swaps.append(relaunch)
+        }
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: support)
+    }
+
+    func testQuittingAppliesWithoutRelaunching() {
+        controller.applyOnQuit()
+        XCTAssertEqual(swaps, [false])
+    }
+
+    func testRestartingSchedulesOneSwapEvenThoughQuittingAsksAgain() {
+        XCTAssertTrue(controller.scheduleSwap(relaunch: true))
+        controller.applyOnQuit()   // what applicationWillTerminate does right after
+
+        XCTAssertEqual(swaps, [true], "the quit path must not schedule a second script")
+    }
+
+    func testSwappingTwiceIsRefused() {
+        XCTAssertTrue(controller.scheduleSwap(relaunch: false))
+        XCTAssertFalse(controller.scheduleSwap(relaunch: true))
+        XCTAssertEqual(swaps, [false])
+    }
+
+    func testNothingHappensWithoutAStagedUpdate() throws {
+        try FileManager.default.removeItem(at: support.appendingPathComponent("updates/staged.json"))
+        controller.applyOnQuit()
+        XCTAssertTrue(swaps.isEmpty)
+    }
+
+    func testTheAppliedMarkerIsWrittenForTheNextLaunch() {
+        controller.applyOnQuit()
+        let marker = support.appendingPathComponent("applied-update.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+    }
+}
