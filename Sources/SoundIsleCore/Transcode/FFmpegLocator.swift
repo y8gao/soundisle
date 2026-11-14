@@ -3,9 +3,14 @@ import Foundation
 /// Finds the ffmpeg/ffprobe CLI pair: the path chosen in Settings first, then
 /// the two Homebrew locations, then whatever `PATH` resolves.
 public enum FFmpegLocator {
+    /// Homebrew (Intel and Apple Silicon) and MacPorts. The last one matters:
+    /// a MacPorts install lives in `/opt/local/bin`, which a GUI app's `PATH`
+    /// (`/usr/bin:/bin:/usr/sbin:/sbin`) never contains, so ffmpeg was right
+    /// there on disk while the app insisted it was missing.
     public static let defaultFixedDirectories = [
         "/usr/local/bin",
         "/opt/homebrew/bin",
+        "/opt/local/bin",
     ]
 
     public static func find(

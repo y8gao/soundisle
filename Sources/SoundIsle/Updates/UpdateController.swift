@@ -173,6 +173,7 @@ final class UpdateController: ObservableObject {
                     kind: .info,
                     text: Lf("发现新版本 %@", release.version.raw),
                     actionTitle: L("查看更新说明"),
+                    symbol: "arrow.down.circle",
                     action: { [weak self] in self?.openReleasePage(release) }
                 )
             )
@@ -239,6 +240,7 @@ final class UpdateController: ObservableObject {
                     kind: .info,
                     text: Lf("%@ 已就绪，重启后生效", release.version.raw),
                     actionTitle: L("现在重启"),
+                    symbol: "arrow.clockwise",
                     action: { [weak self] in self?.restartToApply() }
                 )
             )

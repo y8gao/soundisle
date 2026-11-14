@@ -74,18 +74,27 @@ final class AppModel: ObservableObject {
     @Published private(set) var sortAscending = true
     /// Playlists keep their manual order until the user clicks a column header.
     @Published private(set) var playlistSorting = false
-    /// Transient banner text. Any new message schedules its own dismissal so
-    /// notices like "已删除文件夹" do not sit in the list forever. Messages
-    /// that carry actions (the FFmpeg install banner) opt out below.
-    @Published var statusMessage: String? {
-        didSet { scheduleStatusDismissal() }
+    /// What the library just did — scan results, saves, removals, playback
+    /// errors. All of it surfaces in the window notice now; the list keeps a
+    /// banner only for the FFmpeg prompt, which is a persistent, multi-action
+    /// state rather than a message. Kept as a property so the call sites read
+    /// the same as before.
+    var statusMessage: String? {
+        get { appNotice?.text }
+        set {
+            guard let newValue, !newValue.isEmpty else {
+                dismissNotice()
+                return
+            }
+            showNotice(AppNotice(kind: .info, text: newValue))
+        }
     }
-    private var statusDismissTask: Task<Void, Never>?
     /// Live progress for long file work (tag writes / organize). Non-nil also
     /// means a file operation is in flight, so sheets can disable their action.
     @Published private(set) var fileWorkProgress: String?
     /// The missing-ffmpeg banner adds install/retry/choose-path actions.
     @Published private(set) var showsFFmpegInstallPrompt = false
+    @Published private(set) var ffmpegPromptMessage: String?
     @Published private(set) var transcodeCacheBytes: Int64 = 0
     @Published var isSettingsPresented = false
     /// Main content area: track list or the full-window lyrics page. UI state
@@ -225,7 +234,7 @@ final class AppModel: ObservableObject {
             organizer.undo.loadNotice,
         ].compactMap { $0 }
         if !startupNotices.isEmpty {
-            statusMessage = startupNotices.joined(separator: " ")
+            showWarning(startupNotices.joined(separator: " "))
         }
     }
 
@@ -1056,7 +1065,7 @@ final class AppModel: ObservableObject {
             if updated.isMissing {
                 engine.pause()
                 restoredPosition = 0
-                statusMessage = Lf("《%@》文件缺失，仍保留在列表中。", updated.title)
+                showWarning(Lf("《%@》文件缺失，仍保留在列表中。", updated.title))
             }
         } else {
             currentTrack = nil
@@ -1076,7 +1085,7 @@ final class AppModel: ObservableObject {
             return
         }
         if track.isMissing {
-            statusMessage = Lf("《%@》文件缺失，无法播放。", track.title)
+            showWarning(Lf("《%@》文件缺失，无法播放。", track.title))
             return
         }
 
@@ -1102,7 +1111,7 @@ final class AppModel: ObservableObject {
             if engine.duration > 0 {
                 engine.play()
                 if engine.isPlaying {
-                    statusMessage = nil
+                    dismissNotice()
                 } else {
                     statusMessage = startFailureStatus
                 }
@@ -1133,7 +1142,7 @@ final class AppModel: ObservableObject {
     /// prepared first.
     private func resumeCurrent(_ track: Track) {
         guard !track.isMissing else {
-            statusMessage = Lf("《%@》文件缺失，无法播放。", track.title)
+            showWarning(Lf("《%@》文件缺失，无法播放。", track.title))
             return
         }
         let position = restoredPosition
@@ -1180,7 +1189,7 @@ final class AppModel: ObservableObject {
         if engine.duration > 0 {
             engine.seek(to: time)
             if let error = engine.lastError {
-                statusMessage = Lf("无法跳转播放位置：%@", error)
+                showWarning(Lf("无法跳转播放位置：%@", error))
             }
         } else {
             let upper = current.duration > 0 ? current.duration : time
@@ -1195,7 +1204,7 @@ final class AppModel: ObservableObject {
 
     private func playFromQueue(_ id: UUID) -> Bool {
         guard let track = tracks.first(where: { $0.id == id }) else {
-            statusMessage = L("曲目不在音乐库中。")
+            showWarning(L("曲目不在音乐库中。"))
             return false
         }
         return startTrack(track)
@@ -1208,17 +1217,17 @@ final class AppModel: ObservableObject {
     @discardableResult
     private func startTrack(_ track: Track, startAt: TimeInterval = 0) -> Bool {
         guard !track.isMissing else {
-            statusMessage = Lf("《%@》文件缺失，已跳过。", track.title)
+            showWarning(Lf("《%@》文件缺失，已跳过。", track.title))
             return false
         }
 
         if AudioFormatSupport.isNative(track.url) {
-            showsFFmpegInstallPrompt = false
+            clearFFmpegPrompt()
             pendingTranscodeTrack = nil
             return loadAndPlay(track, url: track.url, startAt: startAt)
         }
         if let cached = transcode.cachedURL(for: track) {
-            showsFFmpegInstallPrompt = false
+            clearFFmpegPrompt()
             pendingTranscodeTrack = nil
             return loadAndPlay(track, url: cached, startAt: startAt)
         }
@@ -1226,8 +1235,7 @@ final class AppModel: ObservableObject {
             // Leave the current song alone: a missing dependency must never
             // freeze the UI or block formats AVFoundation can play.
             pendingTranscodeTrack = track
-            showsFFmpegInstallPrompt = true
-            statusMessage = Lf("需要 FFmpeg 才能播放此格式（《%@》）。", track.title)
+            showFFmpegPrompt(Lf("需要 FFmpeg 才能播放此格式（《%@》）。", track.title))
             return true
         }
 
@@ -1235,7 +1243,7 @@ final class AppModel: ObservableObject {
         engine.unload()
         currentTrack = track
         restoredPosition = startAt
-        showsFFmpegInstallPrompt = false
+        clearFFmpegPrompt()
         statusMessage = Lf("正在准备《%@》…", track.title)
         preparingTrackID = track.id
 
@@ -1252,10 +1260,9 @@ final class AppModel: ObservableObject {
                 self.preparingTrackID = nil
                 if case TranscodeError.ffmpegMissing = error {
                     self.pendingTranscodeTrack = track
-                    self.showsFFmpegInstallPrompt = true
-                    self.statusMessage = Lf("需要 FFmpeg 才能播放此格式（《%@》）。", track.title)
+                    self.showFFmpegPrompt(Lf("需要 FFmpeg 才能播放此格式（《%@》）。", track.title))
                 } else {
-                    self.statusMessage = Lf("无法准备《%@》：%@", track.title, error.localizedDescription)
+                    self.showWarning(Lf("无法准备《%@》：%@", track.title, error.localizedDescription))
                 }
             }
         }
@@ -1273,7 +1280,7 @@ final class AppModel: ObservableObject {
         do {
             try engine.load(url: url)
         } catch {
-            statusMessage = Lf("无法播放《%@》：%@", track.title, engine.lastError ?? L("未知错误"))
+            showWarning(Lf("无法播放《%@》：%@", track.title, engine.lastError ?? L("未知错误")))
             return false
         }
         if startAt > 0 {
@@ -1283,7 +1290,7 @@ final class AppModel: ObservableObject {
         restoredPosition = 0
         engine.play()
         if engine.isPlaying {
-            statusMessage = nil
+            dismissNotice()
         } else {
             statusMessage = startFailureStatus
         }
@@ -1342,13 +1349,12 @@ final class AppModel: ObservableObject {
     @discardableResult
     func redetectFFmpeg() -> String {
         guard let found = FFmpegLocator.find(customPath: library.settings.ffmpegPath) else {
-            showsFFmpegInstallPrompt = true
             let message = L("仍未找到 FFmpeg，请先运行 brew install ffmpeg。")
-            statusMessage = message
+            showFFmpegPrompt(message)
             return message
         }
         transcode.updateFFmpeg(found)
-        showsFFmpegInstallPrompt = false
+        clearFFmpegPrompt()
         let message = Lf("已找到 FFmpeg：%@", found.path)
         statusMessage = message
         prepareLibraryFormats()
@@ -1377,7 +1383,7 @@ final class AppModel: ObservableObject {
         library.settings.ffmpegPath = url.path
         library.saveSettings()
         transcode.updateFFmpeg(url)
-        showsFFmpegInstallPrompt = false
+        clearFFmpegPrompt()
         let message = Lf("已使用 FFmpeg：%@", url.path)
         statusMessage = message
         prepareLibraryFormats()
@@ -2099,25 +2105,26 @@ final class AppModel: ObservableObject {
         endSearchFocus()
     }
 
+    /// Closes the FFmpeg banner: it stays until the user fixes the dependency
+    /// or dismisses it.
     func dismissStatus() {
-        statusDismissTask?.cancel()
-        statusMessage = nil
-        showsFFmpegInstallPrompt = false
+        clearFFmpegPrompt()
         pendingTranscodeTrack = nil
     }
 
-    /// Auto-dismiss plain notices after a few seconds. Actionable banners
-    /// (the FFmpeg install prompt) stay until the user deals with them.
-    private func scheduleStatusDismissal() {
-        statusDismissTask?.cancel()
-        guard let message = statusMessage, !message.isEmpty else { return }
-        guard !showsFFmpegInstallPrompt else { return }
-        statusDismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 6_000_000_000)
-            guard !Task.isCancelled, let self else { return }
-            guard self.statusMessage == message, !self.showsFFmpegInstallPrompt else { return }
-            self.statusMessage = nil
-        }
+    /// An error the user should read: it stays until closed.
+    func showWarning(_ text: String) {
+        showNotice(AppNotice(kind: .warning, text: text))
+    }
+
+    private func showFFmpegPrompt(_ message: String) {
+        showsFFmpegInstallPrompt = true
+        ffmpegPromptMessage = message
+    }
+
+    private func clearFFmpegPrompt() {
+        clearFFmpegPrompt()
+        ffmpegPromptMessage = nil
     }
 
     /// Clicking anywhere outside a text field resigns the search field, so

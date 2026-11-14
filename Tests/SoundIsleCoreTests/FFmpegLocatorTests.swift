@@ -79,3 +79,29 @@ final class FFmpegLocatorTests: XCTestCase {
         return url
     }
 }
+
+extension FFmpegLocatorTests {
+    /// A GUI app's `PATH` is `/usr/bin:/bin:/usr/sbin:/sbin`, so an ffmpeg
+    /// installed by MacPorts is only ever reachable through the fixed list.
+    /// Without it the app reported the dependency missing while it sat on disk.
+    func testMacPortsDirectoryIsSearched() {
+        XCTAssertTrue(FFmpegLocator.defaultFixedDirectories.contains("/opt/local/bin"))
+    }
+
+    func testFixedDirectoriesCoverBothHomebrewPrefixesAndMacPorts() {
+        XCTAssertEqual(
+            FFmpegLocator.defaultFixedDirectories,
+            ["/usr/local/bin", "/opt/homebrew/bin", "/opt/local/bin"]
+        )
+    }
+
+    /// A custom path still beats the fixed list, so a user who picks another
+    /// build keeps it.
+    func testCustomPathBeatsTheFixedDirectories() throws {
+        let ffmpeg = try makeExecutable(named: "ffmpeg-picked")
+        let found = try XCTUnwrap(
+            FFmpegLocator.find(customPath: ffmpeg.path, environment: ["PATH": "/usr/bin:/bin"])
+        )
+        XCTAssertEqual(found.standardizedFileURL, ffmpeg.standardizedFileURL)
+    }
+}

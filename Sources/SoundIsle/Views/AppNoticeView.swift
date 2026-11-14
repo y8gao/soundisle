@@ -65,10 +65,10 @@ struct AppNoticeView: View {
                 .scaleEffect(0.6)
                 .frame(width: 14, height: 14)
         case .info:
-            Icons.symbol("arrow.down.circle", size: 12)
+            Icons.symbol(notice.symbol ?? "info.circle", size: 12)
                 .foregroundColor(theme.accent)
         case .success:
-            Icons.symbol("checkmark.circle", size: 12)
+            Icons.symbol(notice.symbol ?? "checkmark.circle", size: 12)
                 .foregroundColor(theme.accent)
         case .warning:
             Icons.symbol("exclamationmark.triangle", size: 12)

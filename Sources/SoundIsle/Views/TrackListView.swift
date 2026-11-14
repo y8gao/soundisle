@@ -32,8 +32,11 @@ struct TrackListView: View {
                 progressBanner(progress)
             }
 
-            if let message = model.statusMessage {
-                statusBanner(message)
+            // The list keeps one banner: the FFmpeg prompt, which is a
+            // persistent, multi-action state. Every other message is the
+            // window's notice, wherever the user happens to be.
+            if model.showsFFmpegInstallPrompt, let message = model.ffmpegPromptMessage {
+                ffmpegBanner(message)
             }
 
             if model.visibleTracks.isEmpty {
@@ -244,7 +247,9 @@ struct TrackListView: View {
         }
     }
 
-    private func statusBanner(_ message: String) -> some View {
+    /// The one banner the list still owns: ffmpeg is missing and a format
+    /// needs it. Persistent, and carries the three ways to fix it.
+    private func ffmpegBanner(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Icons.warning
@@ -265,25 +270,23 @@ struct TrackListView: View {
                 .buttonStyle(.plain)
                 .help(L("关闭"))
             }
-            if model.showsFFmpegInstallPrompt {
-                HStack(spacing: 12) {
-                    Button(L("复制 brew install ffmpeg")) {
-                        model.copyFFmpegInstallCommand()
-                    }
-                    Button(L("重新检测")) {
-                        model.redetectFFmpeg()
-                    }
-                    Button(L("选择 FFmpeg…")) {
-                        model.chooseFFmpegPath()
-                    }
-                    Text(L("原生格式仍可正常播放"))
-                        .foregroundColor(theme.mutedText(0.45))
-                    Spacer(minLength: 0)
+            HStack(spacing: 12) {
+                Button(L("复制 brew install ffmpeg")) {
+                    model.copyFFmpegInstallCommand()
                 }
-                .font(.system(size: 10.5))
-                .buttonStyle(.plain)
-                .foregroundColor(theme.accentLight)
+                Button(L("重新检测")) {
+                    model.redetectFFmpeg()
+                }
+                Button(L("选择 FFmpeg…")) {
+                    model.chooseFFmpegPath()
+                }
+                Text(L("原生格式仍可正常播放"))
+                    .foregroundColor(theme.mutedText(0.45))
+                Spacer(minLength: 0)
             }
+            .font(.system(size: 10.5))
+            .buttonStyle(.plain)
+            .foregroundColor(theme.accentLight)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 7)
